@@ -19,6 +19,10 @@ pub(crate) mod string_basic;
 pub(crate) mod string_more;
 pub(crate) mod time_basic;
 
+/// The streamline module, we only use this for `init_globals`
+pub mod streamline;
+pub use streamline::StreamlinePackage;
+
 pub use arithmetic::ArithmeticPackage;
 #[cfg(not(feature = "no_index"))]
 pub use array_basic::BasicArrayPackage;
