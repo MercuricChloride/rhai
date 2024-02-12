@@ -1,13 +1,46 @@
 use std::rc::Rc;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{plugin::*, Array};
 use core::cell::RefCell;
 use std::collections::BTreeMap;
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum ModuleKind {
+    Map,
+    Store,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum ModuleInput {
+    Map { map: String },
+    Store { store: String, mode: String },
+}
+
+#[derive(Serialize, Deserialize)]
+struct ModuleOutput {
+    #[serde(rename = "type")]
+    kind: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ModuleData {
+    name: String,
+    kind: ModuleKind,
+    inputs: Vec<ModuleInput>,
+    output: ModuleOutput,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    update_policy: Option<String>,
+}
 
 #[derive(Default)]
 pub struct ModuleDag {
     pub modules: BTreeMap<String, Array>,
 }
+
 impl ModuleDag {
     pub fn new() -> Self {
         Self {
@@ -62,5 +95,26 @@ pub mod module_api {
     #[rhai_fn(pure)]
     pub fn add_module(modules: &mut Modules, module: String, dependencies: Array) {
         modules.borrow_mut().add_module(module, dependencies.into());
+    }
+}
+
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_serialize() {
+        let data = ModuleData {
+            name: "test".to_string(),
+            kind: ModuleKind::Map,
+            inputs: vec![ModuleInput::Map {
+                map: "map_events".to_string(),
+            }],
+            output: ModuleOutput {
+                kind: "proto:google.wkt.struct".to_string(),
+            },
+            update_policy: Some("set_if_not_exists".to_string()),
+        };
+        let as_json = serde_yaml::to_string(&data).unwrap();
+        println!("{as_json}");
     }
 }
