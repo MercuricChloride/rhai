@@ -156,12 +156,12 @@ fn load_script_files(engine: &mut Engine, scope: &mut Scope) {
             exit(1);
         }
 
-        match engine
+        let module = match engine
             .compile(&contents)
             .map_err(|err| err.into())
             .and_then(|mut ast| {
                 ast.set_source(filename.to_string_lossy().to_string());
-                engine.eval_ast_with_scope::<Dynamic>(scope, &ast)
+                Module::eval_ast_as_new(scope.clone_visible(), &ast, engine)
             }) {
             Err(err) => {
                 let filename = filename.to_string_lossy();
@@ -174,10 +174,10 @@ fn load_script_files(engine: &mut Engine, scope: &mut Scope) {
                 print_error(&contents, *err);
                 exit(1);
             }
-            Ok(_) => (),
+            Ok(module) => module,
         };
 
-        // engine.register_global_module(module.into());
+        engine.register_global_module(module.into());
 
         has_init_scripts = true;
 
