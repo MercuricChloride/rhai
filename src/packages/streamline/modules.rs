@@ -1,9 +1,8 @@
-use std::rc::Rc;
-
 use serde::{Deserialize, Serialize};
 
-use crate::{plugin::*, Array};
+use crate::{convert, plugin::*, Array, Scope};
 use core::cell::RefCell;
+use std::rc::Rc;
 use std::collections::BTreeMap;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -187,31 +186,44 @@ pub mod module_api {
             "".into()
         }
     }
-
-    // Add a module to the dependency graph.
-    //#[rhai_fn(pure)]
-    //pub fn add_module(modules: &mut Modules, module: String, dependencies: Array) {
-    //    modules.borrow_mut().add_module(module, dependencies.into());
-    //}
 }
 
-mod test {
-    use super::*;
+pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
+    let module_dag = ModuleDag::new_shared();
 
-    #[test]
-    fn test_serialize() {
-        let data = ModuleData {
-            name: "test".to_string(),
-            kind: ModuleKind::Map,
-            inputs: vec![ModuleInput::Map {
-                map: "map_events".to_string(),
-            }],
-            output: Some(ModuleOutput {
-                kind: "proto:google.wkt.struct".to_string(),
-            }),
-            update_policy: None,
-        };
-        let as_json = serde_yaml::to_string(&data).unwrap();
-        println!("{as_json}");
-    }
+    let modules = module_dag.clone();
+    // TODO - change this to accept in an array of strings, which we will look up to resolve input types
+    engine.register_fn("add_mfn", 
+    move |name: String, inputs: Array| {
+        (*modules).borrow_mut().add_mfn(name, convert!(inputs));
+    });
+
+    let modules = module_dag.clone();
+    engine.register_fn("add_sfn", 
+    move |name: String, inputs: Array| {
+        (*modules).borrow_mut().add_sfn(name, convert!(inputs));
+    });
+    
+    scope.push_constant("MODULES", module_dag);
 }
+
+// mod test {
+//     use super::*;
+
+//     #[test]
+//     fn test_serialize() {
+//         let data = ModuleData {
+//             name: "test".to_string(),
+//             kind: ModuleKind::Map,
+//             inputs: vec![ModuleInput::Map {
+//                 map: "map_events".to_string(),
+//             }],
+//             output: Some(ModuleOutput {
+//                 kind: "proto:google.wkt.struct".to_string(),
+//             }),
+//             update_policy: None,
+//         };
+//         let as_json = serde_yaml::to_string(&data).unwrap();
+//         println!("{as_json}");
+//     }
+// }
