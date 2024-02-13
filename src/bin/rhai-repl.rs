@@ -114,7 +114,7 @@ fn print_keys() {
 // Load script files specified in the command line.
 #[cfg(not(feature = "no_module"))]
 #[cfg(not(feature = "no_std"))]
-fn load_script_files(engine: &mut Engine) {
+fn load_script_files(engine: &mut Engine, scope: &mut Scope) {
     // Load init scripts
     let mut contents = String::new();
     let mut has_init_scripts = false;
@@ -156,12 +156,12 @@ fn load_script_files(engine: &mut Engine) {
             exit(1);
         }
 
-        let module = match engine
+        match engine
             .compile(&contents)
             .map_err(|err| err.into())
             .and_then(|mut ast| {
                 ast.set_source(filename.to_string_lossy().to_string());
-                Module::eval_ast_as_new(Scope::new(), &ast, engine)
+                engine.eval_ast_with_scope::<Dynamic>(scope, &ast)
             }) {
             Err(err) => {
                 let filename = filename.to_string_lossy();
@@ -174,10 +174,10 @@ fn load_script_files(engine: &mut Engine) {
                 print_error(&contents, *err);
                 exit(1);
             }
-            Ok(m) => m,
+            Ok(_) => (),
         };
 
-        engine.register_global_module(module.into());
+        // engine.register_global_module(module.into());
 
         has_init_scripts = true;
 
@@ -267,7 +267,7 @@ fn main() {
 
     #[cfg(not(feature = "no_module"))]
     #[cfg(not(feature = "no_std"))]
-    load_script_files(&mut engine);
+    load_script_files(&mut engine, &mut scope);
 
     // Setup Engine
     #[cfg(not(feature = "no_optimize"))]

@@ -41,5 +41,11 @@ fn init_globals(engine: &mut Engine, scope: &mut Scope) {
         (*modules).borrow_mut().add_mfn(name, convert!(inputs));
     });
 
+    let modules = module_dag.clone();
+    engine.register_fn("add_sfn", 
+    move |name: String, inputs: Array| {
+        (*modules).borrow_mut().add_sfn(name, convert!(inputs));
+    });
+    
     scope.push_constant("MODULES", module_dag);
 }

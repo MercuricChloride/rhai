@@ -88,7 +88,8 @@ pub struct ModuleData {
     name: String,
     kind: ModuleKind,
     inputs: Vec<ModuleInput>,
-    output: ModuleOutput,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output: Option<ModuleOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     update_policy: Option<UpdatePolicy>,
 }
@@ -99,7 +100,17 @@ impl ModuleData {
             name,
             kind: ModuleKind::Map,
             inputs,
-            output: ModuleOutput::default(),
+            output: Some(ModuleOutput::default()),
+            update_policy: None,
+        }
+    }
+
+    pub fn new_sfn(name: String, inputs: Vec<ModuleInput>) -> Self {
+        Self {
+            name,
+            kind: ModuleKind::Store,
+            inputs,
+            output: None,
             update_policy: None,
         }
     }
@@ -121,9 +132,9 @@ impl ModuleDag {
                 inputs: vec![ModuleInput::Map {
                     map: "source".to_string(),
                 }],
-                output: ModuleOutput {
+                output: Some(ModuleOutput {
                     kind: "proto:google.wkt.struct".to_string(),
-                },
+                }),
                 update_policy: None,
             },
         );
@@ -140,8 +151,8 @@ impl ModuleDag {
         self.modules.insert(name.clone(), ModuleData::new_mfn(name, inputs));
     }
 
-    pub fn add_sfn() {
-        todo!();
+    pub fn add_sfn(&mut self, name: String, inputs: Vec<ModuleInput>) {
+        self.modules.insert(name.clone(), ModuleData::new_sfn(name, inputs));
     }
 
     pub fn get_module(&self, name: &str) -> Option<&ModuleData> {
@@ -195,9 +206,9 @@ mod test {
             inputs: vec![ModuleInput::Map {
                 map: "map_events".to_string(),
             }],
-            output: ModuleOutput {
+            output: Some(ModuleOutput {
                 kind: "proto:google.wkt.struct".to_string(),
-            },
+            }),
             update_policy: None,
         };
         let as_json = serde_yaml::to_string(&data).unwrap();
