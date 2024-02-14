@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fs};
 use core::cell::RefCell;
 use std::rc::Rc;
 use serde::{Deserialize, Serialize};
@@ -10,6 +10,19 @@ pub enum ContractSource {
     Abi(String),
     Source(String),
     // TODO - add a way to load from an address
+}
+
+impl ContractSource {
+    pub fn generate_source(&self, name: &str) -> String {
+        match self {
+            ContractSource::Abi(abi) => {
+                format!("sol!({name}, r#\"{abi}\"#);")
+            }
+            ContractSource::Source(source) => {
+                format!("sol!r#\"{source}\"#;")
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -39,6 +52,16 @@ impl ContractImports {
 
     pub fn remove(&mut self, name: String) {
         self.contracts.remove(&name);
+    }
+
+    pub fn generate_sources(&self) -> String {
+        let mut output = String::new();
+
+        for (name, source) in &self.contracts {
+            output.push_str(&source.generate_source(name));
+        }
+
+        output
     }
 }
 
@@ -76,4 +99,14 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     move |name: String| {
         (*contracts).borrow_mut().remove(name);
     });
+
+    let contracts  = contract_imports.clone();
+    engine.register_fn("contracts_source",
+    move || {
+        let contracts_source = (*contracts).borrow().generate_sources();
+        #[cfg(feature = "dev")]
+        fs::write("/tmp/contracts.rs", &contracts_source).unwrap();
+        contracts_source
+    });
+
 }
