@@ -1,7 +1,6 @@
 use super::modules::ModuleData;
 use super::abi::ContractImports;
 
-
 pub mod rust {
     use crate::packages::streamline::modules::{ModuleInput, ModuleKind};
 
@@ -23,10 +22,6 @@ pub mod rust {
         }
 
         output
-    }
-
-    pub fn generate_streamline_sources(sources: &ContractImports) -> String {
-        sources.generate_sources()
     }
 
     fn generate_input_type(input: &ModuleInput) -> String {

@@ -11,7 +11,7 @@ def_package! {
     /// Streamline package for the substreams module
     pub StreamlinePackage(module): StandardPackage {
         combine_with_exported_module!(module, "module_helpers", modules::module_api);
-        combine_with_exported_module!(module, "contract_source_helpers", abi::abi_api);
+        combine_with_exported_module!(module, "abi_helpers", abi::abi_api);
     }
 }
 
@@ -24,7 +24,7 @@ pub fn init_package(mut engine: Engine, mut scope: Scope) -> (Engine, Scope) {
 }
 
 /// Initialize the global variables for the substreams package
-pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
+fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     modules::init_globals(engine, scope);
     abi::init_globals(engine, scope);
 }
