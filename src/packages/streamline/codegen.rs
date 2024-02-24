@@ -1,94 +1,93 @@
-use super::modules::ModuleData;
 use super::abi::ContractImports;
+use super::modules::ModuleData;
 
 pub mod rust {
     use crate::packages::streamline::modules::{ModuleInput, ModuleKind};
 
     use super::*;
 
-    pub fn generate_streamline_modules(modules: &Vec<&ModuleData>) -> String {
-        let mut output = String::new();
-
-        for module in modules {
-            match module.kind() {
-                ModuleKind::Map => {
-                    output.push_str(&generate_mfn(module.name(), module.inputs(), module.handler()));
-                }
-                ModuleKind::Store => {
-                    output.push_str(&generate_sfn(module.name(), module.inputs(), module.handler()));
-                }
-                _ => panic!("We should never be generating a module that isn't a map or store module.")
-            }
-        }
-
-        output
+    trait Generate {
+        fn generate(&self) -> String;
     }
 
-    fn generate_input_type(input: &ModuleInput) -> String {
-        match input {
-            ModuleInput::Map { map: name} => {
-                format!("{name}: JsonStruct")
-            }
+    impl Generate for ModuleInput {
+        fn generate(&self) -> String {
+            match self {
+                ModuleInput::Map { map: name } => {
+                    format!("{name}: JsonStruct")
+                }
 
-            ModuleInput::Store { store: name, mode: mode } => {
-                match mode.as_str() {
+                ModuleInput::Store { store: name, mode } => match mode.as_str() {
                     "get" => {
                         format!("{name}: StoreGetProto<JsonStruct>")
                     }
                     "deltas" => {
-                        format!("{name}: Deltas<DeltaProto<JsonStruct>")
+                        format!("{name}: Deltas<DeltaProto<JsonStruct>>")
                     }
-                    _ => panic!("Unknown mode")
-                }
-            }
+                    _ => panic!("Unknown mode"),
+                },
 
-            ModuleInput::Source { source } => {
-                "block: EthBlock".to_string()
+                ModuleInput::Source { source } => "block: EthBlock".to_string(),
             }
         }
     }
 
+    impl Generate for &Vec<ModuleInput> {
+        fn generate(&self) -> String {
+            self.iter()
+                .map(|i| i.generate())
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+    }
+
+    pub fn generate_streamline_modules(modules: &Vec<&ModuleData>) -> String {
+        modules.iter().fold(String::new(), |acc, e| {
+            let module_code = match e.kind() {
+                ModuleKind::Map => generate_mfn(e.name(), e.inputs(), e.handler()),
+                ModuleKind::Store => generate_sfn(e.name(), e.inputs(), e.handler()),
+                _ => panic!(
+                    "We should never be generating a module that isn't a map or store module."
+                ),
+            };
+            format!("{acc}{module_code}")
+        })
+    }
+
     fn generate_mfn(name: &str, inputs: &Vec<ModuleInput>, handler: &str) -> String {
         // The rust fn inputs
-        let module_inputs = 
-            inputs
-            .iter()
-            .map(generate_input_type)
-            .collect::<Vec<_>>()
-            .join(", ");
+        let module_inputs = inputs.generate();
 
-        let args = if inputs.len() == 1 {
-            format!("{},", inputs[0].name())
+        let arg_names = inputs.iter().map(|input| input.name()).collect::<Vec<_>>();
+
+        let args = if arg_names.len() == 1 {
+            format!("{},", arg_names[0])
         } else {
-            inputs
-            .iter()
-            .map(|input| input.name())
-            .collect::<Vec<_>>()
-            .join(", ")
+            arg_names.join(",")
         };
 
-        format!(r#"
+        format!(
+            r#"
 #[substreams::handlers::map]
 fn {name}({module_inputs}) -> Option<JsonStruct> {{
     let (mut engine, mut scope) = engine_init!();
+    register_builtins(&mut engine);
     let ast = engine.compile(RHAI_SCRIPT).unwrap();
     let result: Dynamic = engine.call_fn(&mut scope, &ast, "{handler}", ({args})).expect("Call failed");
-    from_dynamic::<JsonStruct>(&result).ok()
+    let mut output_map = Map::new();
+    output_map.insert("result".to_string(), from_dynamic(&result).expect("Failed to convert rhai function value to serde_json::Value"));
+    Some(serde_json::from_value(output_map.into()).expect("Failed to convert output_map to json"))
 }}
-    "#)
+    "#
+        )
     }
 
     fn generate_sfn(name: &str, inputs: &Vec<ModuleInput>, handler: &str) -> String {
-        // The rust
-        // The rust fn inputs
-        let module_inputs = 
-            inputs
-            .iter()
-            .map(generate_input_type)
-            .collect::<Vec<_>>()
-            .join(", ");
+        let module_inputs = inputs.generate();
+        let arg_names = inputs.iter().map(|input| input.name()).collect::<Vec<_>>();
 
-        let store_kind = "SetIfNotExistsProto<JsonStruct>";
+        //let store_kind = "StoreSetIfNotExistsProto<JsonStruct>";
+        let store_kind = "StoreSetProto<JsonStruct>";
 
         let args = inputs
             .iter()
@@ -96,15 +95,60 @@ fn {name}({module_inputs}) -> Option<JsonStruct> {{
             .collect::<Vec<_>>()
             .join(", ");
 
-        format!(r#"
+        format!(
+            r#"
 #[substreams::handlers::store]
 fn {name}({module_inputs}, streamline_store_param: {store_kind}) {{
+    let streamline_store_param = Rc::new(streamline_store_param);
     let (mut engine, mut scope) = engine_init!();
+    register_builtins(&mut engine);
     let ast = engine.compile(RHAI_SCRIPT).unwrap();
-    let result: Dynamic = engine.call_fn(&mut scope, &ast, "{handler}", ({args}, streamline_store_param)).expect("Call failed");
-    from_dynamic::<JsonStruct>(&result).unwrap();
+    let result:Dynamic = engine.call_fn(&mut scope, &ast, "{handler}", ({args}, streamline_store_param)).expect("Call failed");
 }}
-    "#)
+    "#
+        )
     }
+}
 
+pub mod yaml {
+    use crate::packages::streamline::modules::ModuleDag;
+
+    const TEMPLATE_YAML: &'static str = "
+specVersion: v0.1.0
+package:
+  name: erc721
+  version: v0.1.0
+
+imports:
+  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.2/substreams-sink-sql-protodefs-v1.0.2.spkg
+  database_change: https://github.com/streamingfast/substreams-sink-database-changes/releases/download/v1.2.1/substreams-database-change-v1.2.1.spkg
+
+protobuf:
+  files:
+   - struct.proto
+  importPaths:
+    - ./proto
+
+network: mainnet
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ./target/wasm32-unknown-unknown/release/streamline.wasm
+
+modules:
+$$MODULES$$
+";
+
+    pub fn generate_yaml(modules: &ModuleDag) -> String {
+        let modules = modules
+            .modules
+            .iter()
+            .map(|(_, module)| module)
+            .collect::<Vec<_>>();
+
+        let yaml = serde_yaml::to_string(&modules).unwrap();
+
+        TEMPLATE_YAML.replace("$$MODULES$$", &yaml)
+    }
 }

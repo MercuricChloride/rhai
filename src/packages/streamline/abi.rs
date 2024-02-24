@@ -1,8 +1,8 @@
-use std::{collections::BTreeMap, fs};
-use core::cell::RefCell;
-use std::rc::Rc;
-use serde::{Deserialize, Serialize};
 use crate::{plugin::*, Scope};
+use core::cell::RefCell;
+use serde::{Deserialize, Serialize};
+use std::rc::Rc;
+use std::{collections::BTreeMap, fs};
 
 #[derive(Serialize, Deserialize, Clone)]
 /// One of the two kinds of contract sources we support
@@ -41,7 +41,18 @@ impl ContractImports {
 
     /// A function to import an abi from a file
     pub fn add_abi(&mut self, name: String, abi_path: String) {
-        let file = std::fs::read_to_string(&abi_path).expect("Couldn't read the file");
+        let is_url = |path: &str| path.starts_with("http://") || path.starts_with("https://");
+
+        let file = if is_url(&abi_path) {
+            // TODO - download the abi from the url
+            let response = reqwest::blocking::get(abi_path).expect("GET request failed!");
+            let content = response
+                .text()
+                .expect("Couldn't read the text of the response!");
+            content
+        } else {
+            std::fs::read_to_string(&abi_path).expect("Couldn't read the file")
+        };
         self.contracts.insert(name, ContractSource::Abi(file));
     }
 
@@ -67,6 +78,10 @@ impl ContractImports {
 
 pub type GlobalContracts = Rc<RefCell<ContractImports>>;
 
+pub struct AbiLookup {
+    pub contracts: &'static GlobalContracts,
+}
+
 #[export_module]
 pub mod abi_api {
     pub type Contracts = GlobalContracts;
@@ -76,37 +91,32 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     let contract_imports = GlobalContracts::new(RefCell::new(ContractImports::new()));
 
     // Register a global variable for the contracts
-    let contracts  = contract_imports.clone();
+    let contracts = contract_imports.clone();
     scope.push_constant("CONTRACTS", contracts);
 
     // add an import_source fn
-    let contracts  = contract_imports.clone();
-    engine.register_fn("import_source", 
-    move |name: String, path: String| {
+    let contracts = contract_imports.clone();
+    engine.register_fn("import_source", move |name: String, path: String| {
         (*contracts).borrow_mut().add_source(name, path);
     });
 
     // add an import_abi fn
-    let contracts  = contract_imports.clone();
-    engine.register_fn("import_abi", 
-    move |name: String, path: String| {
+    let contracts = contract_imports.clone();
+    engine.register_fn("import_abi", move |name: String, path: String| {
         (*contracts).borrow_mut().add_abi(name, path);
     });
 
     // add a remove_contract fn
-    let contracts  = contract_imports.clone();
-    engine.register_fn("remove_contract", 
-    move |name: String| {
+    let contracts = contract_imports.clone();
+    engine.register_fn("remove_contract", move |name: String| {
         (*contracts).borrow_mut().remove(name);
     });
 
-    let contracts  = contract_imports.clone();
-    engine.register_fn("contracts_source",
-    move || {
+    let contracts = contract_imports.clone();
+    engine.register_fn("contracts_source", move || {
         let contracts_source = (*contracts).borrow().generate_sources();
         #[cfg(feature = "dev")]
         fs::write("/tmp/contracts.rs", &contracts_source).unwrap();
         contracts_source
     });
-
 }

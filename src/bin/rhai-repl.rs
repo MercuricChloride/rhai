@@ -119,6 +119,10 @@ fn load_script_files(engine: &mut Engine, scope: &mut Scope) {
     let mut contents = String::new();
     let mut has_init_scripts = false;
 
+    // if we are on a debug build, set the max expression depth to 32
+    //#[cfg(debug_assertions)]
+    //engine.set_max_expr_depths(64, 32);
+
     for filename in env::args().skip(1) {
         let filename = match Path::new(&filename).canonicalize() {
             Err(err) => {

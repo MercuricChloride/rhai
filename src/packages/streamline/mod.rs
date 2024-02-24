@@ -6,12 +6,14 @@ use super::{Package, StandardPackage};
 mod modules;
 mod abi;
 mod codegen;
+pub mod syntax;
 
 def_package! {
     /// Streamline package for the substreams module
     pub StreamlinePackage(module): StandardPackage {
         combine_with_exported_module!(module, "module_helpers", modules::module_api);
         combine_with_exported_module!(module, "abi_helpers", abi::abi_api);
+        //combine_with_exported_module!(module, "stream_helpers", stream::blocks);
     }
 }
 

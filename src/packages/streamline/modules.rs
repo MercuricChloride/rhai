@@ -1,13 +1,15 @@
 use serde::{Deserialize, Serialize};
 
 use crate::serde::from_dynamic;
-use crate::{plugin::*, Array, Scope};
+use crate::{plugin::*, tokenizer::Token, Array, Scope};
 use core::cell::RefCell;
+use std::collections::BTreeMap;
 use std::fs;
 use std::rc::Rc;
-use std::collections::BTreeMap;
 
 use super::codegen;
+
+const JSON_PROTO: &str = "proto:google.protobuf.Struct";
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -20,7 +22,7 @@ pub enum ModuleKind {
 #[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum ModuleInput {
-    Map{ map: String},
+    Map { map: String },
     Store { store: String, mode: String },
     Source { source: String },
 }
@@ -40,19 +42,19 @@ impl<'de> Deserialize<'de> for ModuleInput {
                                 // {kind: "map", input: "map_events"}
                                 let input = value["name"].as_str().unwrap().to_string();
                                 Ok(ModuleInput::Map { map: input })
-                            },
+                            }
                             "store" => {
                                 let store = value["name"].as_str().unwrap().to_string();
                                 let mode = value["mode"].as_str().unwrap_or("get").to_string();
                                 Ok(ModuleInput::Store { store, mode })
                             }
-                            "source" => {
-                                Ok(ModuleInput::Source { source: "sf.ethereum.type.v2.Block".to_string() })
-                            }
-                            _ => panic!("Unknown module kind")
+                            "source" => Ok(ModuleInput::Source {
+                                source: "sf.ethereum.type.v2.Block".to_string(),
+                            }),
+                            _ => panic!("Unknown module kind"),
                         }
-                    },
-                    _ => panic!("Unknown module kind")
+                    }
+                    _ => panic!("Unknown module kind"),
                 }
             }
             None => panic!("No module kind specified"),
@@ -87,7 +89,7 @@ pub struct ModuleOutput {
 impl Default for ModuleOutput {
     fn default() -> Self {
         Self {
-            kind: "proto:google.wkt.struct".to_string(),
+            kind: JSON_PROTO.to_string(),
         }
     }
 }
@@ -102,12 +104,15 @@ pub enum UpdatePolicy {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ModuleData {
     name: String,
+    #[serde(skip_serializing)]
     rhai_handler: String,
     kind: ModuleKind,
     inputs: Vec<ModuleInput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     output: Option<ModuleOutput>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "valueType")]
+    value_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "updatePolicy")]
     update_policy: Option<UpdatePolicy>,
 }
 
@@ -120,6 +125,7 @@ impl ModuleData {
             inputs,
             output: Some(ModuleOutput::default()),
             update_policy: None,
+            value_type: None,
         }
     }
 
@@ -130,7 +136,8 @@ impl ModuleData {
             kind: ModuleKind::Store,
             inputs,
             output: None,
-            update_policy: None,
+            update_policy: Some(UpdatePolicy::Set),
+            value_type: Some(JSON_PROTO.to_string()),
         }
     }
 
@@ -169,9 +176,10 @@ impl ModuleDag {
                     map: "source".to_string(),
                 }],
                 output: Some(ModuleOutput {
-                    kind: "proto:google.wkt.struct".to_string(),
+                    kind: JSON_PROTO.to_string(),
                 }),
                 update_policy: None,
+                value_type: None,
             },
         );
         Self {
@@ -188,7 +196,10 @@ impl ModuleDag {
             .into_iter()
             .map(|e| from_dynamic(&e).expect("Should be map"))
             .collect::<Vec<_>>();
-        self.modules.insert(name.clone(), ModuleData::new_mfn(name, inputs, rhai_handler));
+        self.modules.insert(
+            name.clone(),
+            ModuleData::new_mfn(name, inputs, rhai_handler),
+        );
     }
 
     pub fn add_sfn(&mut self, name: String, inputs: Array, rhai_handler: String) {
@@ -196,7 +207,11 @@ impl ModuleDag {
             .into_iter()
             .map(|e| from_dynamic(&e).expect("Should be map"))
             .collect::<Vec<_>>();
-        self.modules.insert(name.clone(), ModuleData::new_sfn(name, inputs, rhai_handler));
+
+        self.modules.insert(
+            name.clone(),
+            ModuleData::new_sfn(name, inputs, rhai_handler),
+        );
     }
 
     pub fn get_module(&self, name: &str) -> Option<&ModuleData> {
@@ -238,33 +253,78 @@ pub mod module_api {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct ModuleConfig {
+    name: String,
+    inputs: Array,
+    handler: String,
+}
+
 pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     let module_dag = ModuleDag::new_shared();
 
     let modules = module_dag.clone();
     // TODO - change this to accept in an array of strings, which we will look up to resolve input types
-    engine.register_fn("add_mfn", 
-    move |name: String, inputs: Array, handler: String| {
+    engine.register_fn("add_mfn", move |config: Dynamic| {
+        let config = from_dynamic::<ModuleConfig>(&config).unwrap();
+        let ModuleConfig {
+            name,
+            inputs,
+            handler,
+        } = config;
         (*modules).borrow_mut().add_mfn(name, inputs, handler);
     });
 
     let modules = module_dag.clone();
-    engine.register_fn("add_sfn", 
-    move |name: String, inputs: Array, handler: String| {
+    engine.register_fn("add_sfn", move |config: Dynamic| {
+        let config = from_dynamic::<ModuleConfig>(&config).unwrap();
+        let ModuleConfig {
+            name,
+            inputs,
+            handler,
+        } = config;
         (*modules).borrow_mut().add_sfn(name, inputs, handler);
     });
 
     let modules = module_dag.clone();
-    engine.register_fn("modules_source", 
-    move || {
+    engine.register_fn("generate_yaml", move || {
+        let modules = (*modules).borrow();
+
+        let yaml = codegen::yaml::generate_yaml(&modules);
+        #[cfg(feature = "dev")]
+        {
+            let path =
+                "/home/alexandergusev/streamline/streamline-template-repository/streamline.yaml";
+            fs::write(&path, &yaml).unwrap()
+        }
+        yaml
+    });
+
+    let modules = module_dag.clone();
+    engine.register_fn("modules_source", move || {
         let modules_source = (*modules).borrow().generate_streamline_modules();
         #[cfg(feature = "dev")]
         fs::write("/tmp/streamline.rs", &modules_source).unwrap();
         modules_source
     });
-    
+
     scope.push_constant("MODULES", module_dag);
 }
+
+// engine.on_parse_token(|token, _, _| {
+//     match token {
+//         // If we have a address literal that is 42 characters long, we want to convert it to an address type
+//         Token::Identifier(s) if s.starts_with("0x") && s.len() == 42 => {
+//             //let replacement = format!("address({s})");
+//             let replacement = format!("print(123457890)");
+//             Token::Identifier(Box::new(replacement.into()))
+//         }
+//         Token::Custom(value) => {
+//             panic!("CUSTOM VALUE")
+//         }
+//         _ => token
+//     }
+// });
 
 // mod test {
 //     use super::*;
