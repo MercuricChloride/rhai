@@ -56,7 +56,7 @@ dev = []
 substreams_runtime = []
 
 ## Default features: `std`, uses runtime random numbers for hashing.
-default = ["std", "ahash/runtime-rng", "serde", "internals", "dep:serde_json"] # ahash/runtime-rng trumps ahash/compile-time-rng
+default = ["std", "ahash/runtime-rng", "serde", "internals", "dep:serde_json", "dep:reqwest"] # ahash/runtime-rng trumps ahash/compile-time-rng
 ## Standard features: uses compile-time random number for hashing.
 std = ["once_cell/std", "ahash/std", "num-traits/std", "smartstring/std"]
 

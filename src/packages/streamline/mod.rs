@@ -31,6 +31,7 @@ pub fn init_package(mut engine: Engine, mut scope: Scope) -> (Engine, Scope) {
 /// Initialize the global variables for the substreams package
 fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     modules::init_globals(engine, scope);
+    #[cfg(not(feature = "substreams_runtime"))]
     abi::init_globals(engine, scope);
     blocks::init_globals(engine, scope);
 }
