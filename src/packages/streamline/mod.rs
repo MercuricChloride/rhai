@@ -7,8 +7,8 @@ mod blocks;
 mod codegen;
 /// A plugin to handle the dag of substreams modules
 mod modules;
-/// A plugin to add custom syntax for streamline
-mod syntax;
+// A plugin to add custom syntax for streamline
+//mod syntax;
 
 def_package! {
     /// Streamline package for the substreams module
