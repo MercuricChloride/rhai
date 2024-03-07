@@ -11,6 +11,11 @@ use super::codegen;
 
 const JSON_PROTO: &str = "proto:google.protobuf.Struct";
 
+enum AccessMode {
+    Get,
+    Deltas,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum ModuleKind {
@@ -48,9 +53,7 @@ impl<'de> Deserialize<'de> for ModuleInput {
                                 let mode = value["mode"].as_str().unwrap_or("get").to_string();
                                 Ok(ModuleInput::Store { store, mode })
                             }
-                            "source" => Ok(ModuleInput::Source {
-                                source: "sf.ethereum.type.v2.Block".to_string(),
-                            }),
+                            "source" => Ok(ModuleInput::eth_block()),
                             _ => panic!("Unknown module kind"),
                         }
                     }
@@ -67,7 +70,11 @@ impl ModuleInput {
         Self::Map { map }
     }
 
-    pub fn store(store: String, mode: String) -> Self {
+    pub fn store(store: String, mode: AccessMode) -> Self {
+        let mode = match mode {
+            AccessMode::Get => "get".to_string(),
+            AccessMode::Deltas => "deltas".to_string(),
+        };
         Self::Store { store, mode }
     }
 
@@ -76,6 +83,12 @@ impl ModuleInput {
             ModuleInput::Map { map } => map.to_string(),
             ModuleInput::Store { store, mode: _ } => store.to_string(),
             ModuleInput::Source { source: _ } => "block".to_string(),
+        }
+    }
+
+    pub fn eth_block() -> Self {
+        Self::Source {
+            source: "sf.ethereum.type.v2.Block".to_string(),
         }
     }
 }
@@ -117,10 +130,10 @@ pub struct ModuleData {
 }
 
 impl ModuleData {
-    pub fn new_mfn(name: String, inputs: Vec<ModuleInput>, rhai_handler: String) -> Self {
+    pub fn new_mfn(name: String, inputs: Vec<ModuleInput>) -> Self {
         Self {
+            rhai_handler: name.clone(),
             name,
-            rhai_handler,
             kind: ModuleKind::Map,
             inputs,
             output: Some(ModuleOutput::default()),
@@ -129,15 +142,29 @@ impl ModuleData {
         }
     }
 
-    pub fn new_sfn(name: String, inputs: Vec<ModuleInput>, rhai_handler: String) -> Self {
+    pub fn new_sfn(name: String, inputs: Vec<ModuleInput>) -> Self {
         Self {
+            rhai_handler: name.clone(),
             name,
-            rhai_handler,
             kind: ModuleKind::Store,
             inputs,
             output: None,
             update_policy: Some(UpdatePolicy::Set),
             value_type: Some(JSON_PROTO.to_string()),
+        }
+    }
+
+    pub fn eth_block() -> Self {
+        Self {
+            name: "block".to_string(),
+            rhai_handler: "block".to_string(),
+            kind: ModuleKind::Source,
+            inputs: vec![],
+            output: Some(ModuleOutput {
+                kind: "sf.ethereum.type.v2.Block".to_string(),
+            }),
+            update_policy: None,
+            value_type: None,
         }
     }
 
@@ -166,22 +193,25 @@ pub struct ModuleDag {
 impl ModuleDag {
     pub fn new() -> Self {
         let mut module_map = BTreeMap::new();
-        module_map.insert(
-            "map_events".to_string(),
-            ModuleData {
-                name: "map_events".to_string(),
-                rhai_handler: "map_events".to_string(),
-                kind: ModuleKind::Map,
-                inputs: vec![ModuleInput::Map {
-                    map: "source".to_string(),
-                }],
-                output: Some(ModuleOutput {
-                    kind: JSON_PROTO.to_string(),
-                }),
-                update_policy: None,
-                value_type: None,
-            },
-        );
+
+        module_map.insert("BLOCK".to_string(), ModuleData::eth_block());
+
+        // module_map.insert(
+        //     "map_events".to_string(),
+        //     ModuleData {
+        //         name: "map_events".to_string(),
+        //         rhai_handler: "map_events".to_string(),
+        //         kind: ModuleKind::Map,
+        //         inputs: vec![ModuleInput::Map {
+        //             map: "source".to_string(),
+        //         }],
+        //         output: Some(ModuleOutput {
+        //             kind: JSON_PROTO.to_string(),
+        //         }),
+        //         update_policy: None,
+        //         value_type: None,
+        //     },
+        // );
         Self {
             modules: module_map,
         }
@@ -191,27 +221,88 @@ impl ModuleDag {
         Rc::new(RefCell::new(Self::new()))
     }
 
-    pub fn add_mfn(&mut self, name: String, inputs: Array, rhai_handler: String) {
-        let inputs = inputs
+    pub fn add_mfn(&mut self, name: String, inputs: Array) {
+        let input_names = inputs
             .into_iter()
-            .map(|e| from_dynamic(&e).expect("Should be map"))
+            .map(|e| from_dynamic(&e).expect("Should be a list of strings"))
+            .collect::<Vec<String>>();
+
+        let inputs = input_names
+            .iter()
+            .map(|input| {
+                // This is used if we have a store that isn't being accessed in the default mode
+                let mut access_mode: AccessMode = AccessMode::Get;
+                let name: &str;
+
+                match input {
+                    s if s.ends_with(":deltas") => {
+                        name = input.trim_end_matches(":deltas");
+                        access_mode = AccessMode::Deltas;
+                    }
+                    s if s.ends_with(":get") => {
+                        name = input.trim_end_matches(":get");
+                    }
+                    _ => {
+                        name = input;
+                    }
+                }
+
+                let module = self
+                    .get_module(&name)
+                    .expect(&format!("No module found with name {:?}", input));
+                (module, access_mode)
+            })
+            .map(|(module, access_mode)| match module.kind() {
+                ModuleKind::Map => ModuleInput::map(module.name().to_string()),
+                ModuleKind::Store => ModuleInput::store(module.name().to_string(), access_mode),
+                ModuleKind::Source => ModuleInput::eth_block(),
+            })
             .collect::<Vec<_>>();
-        self.modules.insert(
-            name.clone(),
-            ModuleData::new_mfn(name, inputs, rhai_handler),
-        );
+
+        self.modules
+            .insert(name.clone(), ModuleData::new_mfn(name, inputs));
     }
 
-    pub fn add_sfn(&mut self, name: String, inputs: Array, rhai_handler: String) {
-        let inputs = inputs
+    pub fn add_sfn(&mut self, name: String, inputs: Array) {
+        let input_names = inputs
             .into_iter()
-            .map(|e| from_dynamic(&e).expect("Should be map"))
+            .map(|e| from_dynamic(&e).expect("Should be a list of strings"))
+            .collect::<Vec<String>>();
+
+        let inputs = input_names
+            .iter()
+            .map(|input| {
+                // This is used if we have a store that isn't being accessed in the default mode
+                let mut access_mode: AccessMode = AccessMode::Get;
+                let name: &str;
+
+                match input {
+                    s if s.ends_with(":deltas") => {
+                        name = input.trim_end_matches(":deltas");
+                        access_mode = AccessMode::Deltas;
+                    }
+                    s if s.ends_with(":get") => {
+                        name = input.trim_end_matches(":get");
+                    }
+                    _ => {
+                        name = input;
+                    }
+                }
+
+                let module = self
+                    .get_module(&name)
+                    .expect(&format!("No module found with name {:?}", input));
+                (module, access_mode)
+            })
+            .map(|(module, access_mode)| match module.kind() {
+                ModuleKind::Map => ModuleInput::map(module.name().to_string()),
+                ModuleKind::Store => ModuleInput::store(module.name().to_string(), access_mode),
+                ModuleKind::Source => ModuleInput::eth_block(),
+            })
             .collect::<Vec<_>>();
 
-        self.modules.insert(
-            name.clone(),
-            ModuleData::new_sfn(name, inputs, rhai_handler),
-        );
+        self.modules
+            .insert(name.clone(), ModuleData::new_sfn(name, inputs));
     }
 
     pub fn get_module(&self, name: &str) -> Option<&ModuleData> {
@@ -251,13 +342,49 @@ pub mod module_api {
             "".into()
         }
     }
+
+    // #[rhai_fn(pure)]
+    // pub fn eval_module(
+    //     modules: &mut Modules,
+    //     name: &str,
+    //     block_data: Dynamic,
+    //     engine: &mut Engine,
+    // ) -> Dynamic {
+    //     // So to eval a module, we need to eval it's inputs, until we get to something that has an input of a source, then we can eval that module with the block data as inputs
+    //     if let Some(module) = modules.borrow().get_module(name).cloned() {
+    //         let inputs = module
+    //             .inputs
+    //             .iter()
+    //             .map(|input| match input {
+    //                 ModuleInput::Map { map } => eval_module(modules, &map, block_data.clone()),
+    //                 ModuleInput::Store { store, mode } => {
+    //                     if mode == "get" {
+    //                         eval_module(modules, &store, block_data.clone())
+    //                     } else {
+    //                         panic!("Deltas mode not supported yet")
+    //                     }
+    //                 }
+    //                 ModuleInput::Source { source } => {
+    //                     if source == "block" {
+    //                         block_data.clone()
+    //                     } else {
+    //                         panic!("Unknown source")
+    //                     }
+    //                 }
+    //             })
+    //             .collect::<Vec<_>>();
+
+    //         let handler = module.handler();
+    //     } else {
+    //         "".into()
+    //     }
+    // }
 }
 
 #[derive(Serialize, Deserialize)]
 struct ModuleConfig {
     name: String,
     inputs: Array,
-    handler: String,
 }
 
 pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
@@ -265,25 +392,18 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
 
     let modules = module_dag.clone();
     // TODO - change this to accept in an array of strings, which we will look up to resolve input types
-    engine.register_fn("add_mfn", move |config: Dynamic| {
-        let config = from_dynamic::<ModuleConfig>(&config).unwrap();
-        let ModuleConfig {
-            name,
-            inputs,
-            handler,
-        } = config;
-        (*modules).borrow_mut().add_mfn(name, inputs, handler);
+    engine.register_fn("add_mfn", move |name: Dynamic, inputs: Dynamic| {
+        let name = from_dynamic(&name).unwrap();
+        let inputs = from_dynamic(&inputs).unwrap();
+
+        (*modules).borrow_mut().add_mfn(name, inputs);
     });
 
     let modules = module_dag.clone();
-    engine.register_fn("add_sfn", move |config: Dynamic| {
-        let config = from_dynamic::<ModuleConfig>(&config).unwrap();
-        let ModuleConfig {
-            name,
-            inputs,
-            handler,
-        } = config;
-        (*modules).borrow_mut().add_sfn(name, inputs, handler);
+    engine.register_fn("add_sfn", move |name: Dynamic, inputs: Dynamic| {
+        let name = from_dynamic(&name).unwrap();
+        let inputs = from_dynamic(&inputs).unwrap();
+        (*modules).borrow_mut().add_sfn(name, inputs);
     });
 
     let modules = module_dag.clone();
@@ -301,7 +421,7 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     });
 
     let modules = module_dag.clone();
-    engine.register_fn("modules_source", move || {
+    engine.register_fn("generate_rust", move || {
         let modules_source = (*modules).borrow().generate_streamline_modules();
         #[cfg(feature = "dev")]
         fs::write("/tmp/streamline.rs", &modules_source).unwrap();

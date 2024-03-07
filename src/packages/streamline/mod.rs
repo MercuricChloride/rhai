@@ -1,12 +1,14 @@
-use rhai_codegen::{combine_with_exported_module};
-use crate::{def_package, Array, Engine, Scope};
 use super::{Package, StandardPackage};
+use crate::{def_package, Array, Engine, Scope};
+use rhai_codegen::combine_with_exported_module;
 
+mod abi;
+mod blocks;
+mod codegen;
 /// A plugin to handle the dag of substreams modules
 mod modules;
-mod abi;
-mod codegen;
-pub mod syntax;
+/// A plugin to add custom syntax for streamline
+mod syntax;
 
 def_package! {
     /// Streamline package for the substreams module

@@ -46,9 +46,7 @@ pub mod rust {
             let module_code = match e.kind() {
                 ModuleKind::Map => generate_mfn(e.name(), e.inputs(), e.handler()),
                 ModuleKind::Store => generate_sfn(e.name(), e.inputs(), e.handler()),
-                _ => panic!(
-                    "We should never be generating a module that isn't a map or store module."
-                ),
+                _ => "".to_string(),
             };
             format!("{acc}{module_code}")
         })
@@ -111,7 +109,7 @@ fn {name}({module_inputs}, streamline_store_param: {store_kind}) {{
 }
 
 pub mod yaml {
-    use crate::packages::streamline::modules::ModuleDag;
+    use crate::packages::streamline::modules::{ModuleDag, ModuleKind};
 
     const TEMPLATE_YAML: &'static str = "
 specVersion: v0.1.0
@@ -144,7 +142,11 @@ $$MODULES$$
         let modules = modules
             .modules
             .iter()
-            .map(|(_, module)| module)
+            .filter_map(|(_, module)| match module.kind() {
+                ModuleKind::Map => Some(module),
+                ModuleKind::Store => Some(module),
+                ModuleKind::Source => None,
+            })
             .collect::<Vec<_>>();
 
         let yaml = serde_yaml::to_string(&modules).unwrap();
