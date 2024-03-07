@@ -45,11 +45,19 @@ impl ContractImports {
 
         let file = if is_url(&abi_path) {
             // TODO - download the abi from the url
-            let response = reqwest::blocking::get(abi_path).expect("GET request failed!");
-            let content = response
-                .text()
-                .expect("Couldn't read the text of the response!");
-            content
+            #[cfg(not(feature = "substreams_runtime"))]
+            {
+                let response = reqwest::blocking::get(abi_path).expect("GET request failed!");
+                let content = response
+                    .text()
+                    .expect("Couldn't read the text of the response!");
+                content
+            }
+
+            #[cfg(feature = "substreams_runtime")]
+            {
+                panic!("Can't download from a url from within the substreams runtime!")
+            }
         } else {
             std::fs::read_to_string(&abi_path).expect("Couldn't read the file")
         };
