@@ -42,10 +42,8 @@ anyhow = "1.0.79"
 serde_yaml = "0.9.31"
 prost-wkt-types = "0.4.2"
 reqwest = { version = "0.11.24", features = ["blocking"] }
-substreams-alloy-helpers = { git = "https://github.com/MercuricChloride/substreams-alloy-helpers.git" }
 substreams = "0.5.13"
-
-
+substreams-ethereum = "0.9.9"
 
 [dev-dependencies]
 rmp-serde = "1.1.0"
@@ -54,10 +52,10 @@ serde_json = { version = "1.0.45", default-features = false, features = ["alloc"
 [features]
 dev = []
 
-substreams_runtime = ["serde_json"]
+substreams_runtime = []
 
 ## Default features: `std`, uses runtime random numbers for hashing.
-default = ["std", "ahash/runtime-rng", "serde", "internals"] # ahash/runtime-rng trumps ahash/compile-time-rng
+default = ["std", "ahash/runtime-rng", "serde", "internals", "dep:serde_json"] # ahash/runtime-rng trumps ahash/compile-time-rng
 ## Standard features: uses compile-time random number for hashing.
 std = ["once_cell/std", "ahash/std", "num-traits/std", "smartstring/std"]
 
@@ -72,7 +70,7 @@ serde = ["dep:serde", "smartstring/serde", "smallvec/serde", "thin-vec/serde"]
 ## Allow [Unicode Standard Annex #31](https://unicode.org/reports/tr31/) for identifiers.
 unicode-xid-ident = ["unicode-xid"]
 ## Enable functions metadata (including doc-comments); implies [`serde`](#feature-serde).
-metadata = ["serde", "serde_json", "rhai_codegen/metadata", "smartstring/serde"]
+metadata = ["serde", "dep:serde_json", "rhai_codegen/metadata", "smartstring/serde"]
 ## Expose internal data structures (e.g. `AST` nodes).
 internals = []
 ## Enable the debugging interface (implies [`internals`](#feature-internals)).

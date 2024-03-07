@@ -15,6 +15,7 @@ def_package! {
     pub StreamlinePackage(module): StandardPackage {
         combine_with_exported_module!(module, "module_helpers", modules::module_api);
         combine_with_exported_module!(module, "abi_helpers", abi::abi_api);
+        combine_with_exported_module!(module, "block_helpers", blocks::blocks)
         //combine_with_exported_module!(module, "stream_helpers", stream::blocks);
     }
 }
@@ -31,4 +32,5 @@ pub fn init_package(mut engine: Engine, mut scope: Scope) -> (Engine, Scope) {
 fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     modules::init_globals(engine, scope);
     abi::init_globals(engine, scope);
+    blocks::init_globals(engine, scope);
 }

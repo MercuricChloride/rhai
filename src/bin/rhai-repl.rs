@@ -282,7 +282,7 @@ fn main() {
     #[cfg(not(feature = "no_std"))]
     {
         let mut resolver = rhai::module_resolvers::FileModuleResolver::new();
-        resolver.enable_cache(false);
+        resolver.enable_cache(true);
         engine.set_module_resolver(resolver);
     }
 

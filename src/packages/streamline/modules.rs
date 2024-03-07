@@ -397,6 +397,7 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
         let inputs = from_dynamic(&inputs).unwrap();
 
         (*modules).borrow_mut().add_mfn(name, inputs);
+        "Added mfn to DAG!".to_string()
     });
 
     let modules = module_dag.clone();
@@ -404,28 +405,32 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
         let name = from_dynamic(&name).unwrap();
         let inputs = from_dynamic(&inputs).unwrap();
         (*modules).borrow_mut().add_sfn(name, inputs);
+        "Added sfn to DAG!".to_string()
     });
 
     let modules = module_dag.clone();
-    engine.register_fn("generate_yaml", move || {
+    engine.register_fn("generate_yaml", move |path: String| {
         let modules = (*modules).borrow();
 
         let yaml = codegen::yaml::generate_yaml(&modules);
-        #[cfg(feature = "dev")]
-        {
-            let path =
-                "/home/alexandergusev/streamline/streamline-template-repository/streamline.yaml";
-            fs::write(&path, &yaml).unwrap()
-        }
-        yaml
+        fs::write(&path, &yaml).unwrap();
+        format!("Wrote yaml to {} successfully!", &path)
     });
 
     let modules = module_dag.clone();
-    engine.register_fn("generate_rust", move || {
+    engine.register_fn("generate_rust", move |path: String| {
         let modules_source = (*modules).borrow().generate_streamline_modules();
-        #[cfg(feature = "dev")]
-        fs::write("/tmp/streamline.rs", &modules_source).unwrap();
-        modules_source
+        fs::write(&path, &modules_source).unwrap();
+        format!("Wrote rust source to {} successfully!", &path)
+    });
+
+    // we use the substreams_runtime feature only when we are running in the substreams, not in the repl
+    engine.register_fn("in_repl", move || {
+        if cfg!(feature = "substreams_runtime") {
+            false
+        } else {
+            true
+        }
     });
 
     scope.push_constant("MODULES", module_dag);
