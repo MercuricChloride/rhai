@@ -1,4 +1,4 @@
-use rhai::{Engine, EvalAltResult, Position};
+use rhai::{packages::streamline, Engine, EvalAltResult, Position, Scope};
 
 use std::{env, fs::File, io::Read, path::Path, process::exit};
 
@@ -53,6 +53,9 @@ fn main() {
         // Initialize scripting engine
         #[allow(unused_mut)]
         let mut engine = Engine::new();
+        let mut scope = Scope::new();
+
+        let (mut engine, mut scope) = streamline::init_package(engine, scope);
 
         #[cfg(not(feature = "no_optimize"))]
         engine.set_optimization_level(rhai::OptimizationLevel::Simple);
