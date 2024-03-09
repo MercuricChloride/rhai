@@ -73,8 +73,12 @@ fn {name}({module_inputs}) -> Option<JsonStruct> {{
     let ast = engine.compile(RHAI_SCRIPT).unwrap();
     let result: Dynamic = engine.call_fn(&mut scope, &ast, "{handler}", ({args})).expect("Call failed");
     let mut output_map = Map::new();
-    output_map.insert("result".to_string(), from_dynamic(&result).expect("Failed to convert rhai function value to serde_json::Value"));
-    Some(serde_json::from_value(output_map.into()).expect("Failed to convert output_map to json"))
+    if result.is_unit() {{
+        None
+    }} else {{
+        output_map.insert("result".to_string(), from_dynamic(&result).expect("Failed to convert rhai function value to serde_json::Value"));
+        Some(serde_json::from_value(output_map.into()).expect("Failed to convert output_map to json"))
+    }}
 }}
     "#
         )
