@@ -28,7 +28,7 @@ impl ContractImports {
         self.contracts.remove(&name);
     }
 
-    pub fn generate_sources(&self, path: &str) -> String {
+    pub fn generate_sources(&self, path: &str) {
         for (name, source) in &self.contracts {
             let full_path;
             if path.ends_with("/") {
@@ -72,6 +72,6 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     let contracts  = contract_imports.clone();
     engine.register_fn("contracts_source",
     move |path: String| {
-        (*contracts).borrow().generate_sources(&path)
+        (*contracts).borrow().generate_sources(&path);
     });
 }

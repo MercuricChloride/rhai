@@ -35,6 +35,7 @@ fn eprint_error(input: &str, mut err: EvalAltResult) {
 }
 
 fn main() {
+    println!("Streamline Run:\n");
     let mut contents = String::new();
 
     for filename in env::args().skip(1) {
@@ -52,9 +53,8 @@ fn main() {
 
         // Initialize scripting engine
         #[allow(unused_mut)]
-        let mut engine = Engine::new();
+        let mut engine = Engine::new_raw();
         let mut scope = Scope::new();
-
         let (mut engine, mut scope) = streamline::init_package(engine, scope);
 
         #[cfg(not(feature = "no_optimize"))]

@@ -142,14 +142,14 @@ impl ModuleData {
         }
     }
 
-    pub fn new_sfn(name: String, inputs: Vec<ModuleInput>) -> Self {
+    pub fn new_sfn(name: String, inputs: Vec<ModuleInput>, update_policy: UpdatePolicy) -> Self {
         Self {
             rhai_handler: name.clone(),
             name,
             kind: ModuleKind::Store,
             inputs,
             output: None,
-            update_policy: Some(UpdatePolicy::Set),
+            update_policy: Some(update_policy),
             value_type: Some(JSON_PROTO.to_string()),
         }
     }
@@ -263,7 +263,13 @@ impl ModuleDag {
             .insert(name.clone(), ModuleData::new_mfn(name, inputs));
     }
 
-    pub fn add_sfn(&mut self, name: String, inputs: Array) {
+    pub fn add_sfn(&mut self, name: String, inputs: Array, update_policy: String) {
+        let update_policy = match update_policy.as_str() {
+            "set" => UpdatePolicy::Set,
+            "setOnce" => UpdatePolicy::SetIfNotExists,
+            _ => panic!("Unknown update policy!")
+        };
+
         let input_names = inputs
             .into_iter()
             .map(|e| from_dynamic(&e).expect("Should be a list of strings"))
@@ -302,7 +308,7 @@ impl ModuleDag {
             .collect::<Vec<_>>();
 
         self.modules
-            .insert(name.clone(), ModuleData::new_sfn(name, inputs));
+            .insert(name.clone(), ModuleData::new_sfn(name, inputs, update_policy));
     }
 
     pub fn get_module(&self, name: &str) -> Option<&ModuleData> {
@@ -401,10 +407,10 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     });
 
     let modules = module_dag.clone();
-    engine.register_fn("add_sfn", move |name: Dynamic, inputs: Dynamic| {
+    engine.register_fn("add_sfn", move |name: Dynamic, inputs: Dynamic, update_policy: String| {
         let name = from_dynamic(&name).unwrap();
         let inputs = from_dynamic(&inputs).unwrap();
-        (*modules).borrow_mut().add_sfn(name, inputs);
+        (*modules).borrow_mut().add_sfn(name, inputs, update_policy);
         "Added sfn to DAG!".to_string()
     });
 
