@@ -76,7 +76,8 @@ fn {name}({module_inputs}) -> Option<JsonStruct> {{
     if result.is_unit() {{
         None
     }} else {{
-        output_map.insert("result".to_string(), from_dynamic(&result).expect("Failed to convert rhai function value to serde_json::Value"));
+        let result = serde_json::to_value(&result).expect("Couldn't convert from Dynamic!");
+        output_map.insert("result".to_string(), result);
         Some(serde_json::from_value(output_map.into()).expect("Failed to convert output_map to json"))
     }}
 }}

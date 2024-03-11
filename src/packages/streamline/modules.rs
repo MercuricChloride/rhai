@@ -348,43 +348,6 @@ pub mod module_api {
             "".into()
         }
     }
-
-    // #[rhai_fn(pure)]
-    // pub fn eval_module(
-    //     modules: &mut Modules,
-    //     name: &str,
-    //     block_data: Dynamic,
-    //     engine: &mut Engine,
-    // ) -> Dynamic {
-    //     // So to eval a module, we need to eval it's inputs, until we get to something that has an input of a source, then we can eval that module with the block data as inputs
-    //     if let Some(module) = modules.borrow().get_module(name).cloned() {
-    //         let inputs = module
-    //             .inputs
-    //             .iter()
-    //             .map(|input| match input {
-    //                 ModuleInput::Map { map } => eval_module(modules, &map, block_data.clone()),
-    //                 ModuleInput::Store { store, mode } => {
-    //                     if mode == "get" {
-    //                         eval_module(modules, &store, block_data.clone())
-    //                     } else {
-    //                         panic!("Deltas mode not supported yet")
-    //                     }
-    //                 }
-    //                 ModuleInput::Source { source } => {
-    //                     if source == "block" {
-    //                         block_data.clone()
-    //                     } else {
-    //                         panic!("Unknown source")
-    //                     }
-    //                 }
-    //             })
-    //             .collect::<Vec<_>>();
-
-    //         let handler = module.handler();
-    //     } else {
-    //         "".into()
-    //     }
-    // }
 }
 
 #[derive(Serialize, Deserialize)]

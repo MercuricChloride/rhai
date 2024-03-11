@@ -45,6 +45,7 @@ prost-wkt-types = "0.4.2"
 reqwest = { version = "0.11.24", features = ["blocking"], optional = true }
 substreams = "0.5.13"
 substreams-ethereum = "0.9.9"
+substreams-entity-change = { git = "https://github.com/MercuricChloride/substreams-sink-entity-changes.git", branch = "develop" }
 
 [dev-dependencies]
 rmp-serde = "1.1.0"

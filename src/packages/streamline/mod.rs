@@ -5,18 +5,16 @@ use rhai_codegen::combine_with_exported_module;
 mod abi;
 mod blocks;
 mod codegen;
+mod graph_out;
 /// A plugin to handle the dag of substreams modules
 mod modules;
-// A plugin to add custom syntax for streamline
-//mod syntax;
 
 def_package! {
     /// Streamline package for the substreams module
     pub StreamlinePackage(module): StandardPackage {
         combine_with_exported_module!(module, "module_helpers", modules::module_api);
         combine_with_exported_module!(module, "abi_helpers", abi::abi_api);
-        combine_with_exported_module!(module, "block_helpers", blocks::blocks)
-        //combine_with_exported_module!(module, "stream_helpers", stream::blocks);
+        combine_with_exported_module!(module, "block_helpers", blocks::blocks);
     }
 }
 
@@ -34,4 +32,5 @@ fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     #[cfg(not(feature = "substreams_runtime"))]
     abi::init_globals(engine, scope);
     blocks::init_globals(engine, scope);
+    graph_out::init_globals(engine, scope);
 }
