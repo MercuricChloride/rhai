@@ -1,10 +1,11 @@
-use crate::{plugin::*, Scope};
+use crate::{plugin::*, Array, Scope};
+use core::convert::TryFrom;
 use core::str::FromStr;
 use num_traits::ToPrimitive;
 use substreams::scalar::BigInt;
 use substreams_entity_change::pb::entity::value::Typed;
 
-use substreams_entity_change::pb::entity::{Array, EntityChange, Field, Value};
+use substreams_entity_change::pb::entity::{Array as SfArray, EntityChange, Field, Value};
 
 #[export_module]
 pub mod graph_out {
@@ -13,11 +14,8 @@ pub mod graph_out {
     pub type SubgraphFieldChange = Field;
 
     #[rhai_fn(global)]
-    pub fn create_entity(
-        entity_name: String,
-        entity_id: String,
-        fields: Vec<SubgraphFieldChange>,
-    ) -> EntityChange {
+    pub fn create_entity(entity_name: String, entity_id: String, fields: Array) -> EntityChange {
+        let fields = fields.into_iter().map(|e| e.cast()).collect::<Vec<_>>();
         EntityChange {
             entity: entity_name,
             id: entity_id,
@@ -28,11 +26,8 @@ pub mod graph_out {
     }
 
     #[rhai_fn(global)]
-    pub fn update_entity(
-        entity_name: String,
-        entity_id: String,
-        fields: Vec<SubgraphFieldChange>,
-    ) -> EntityChange {
+    pub fn update_entity(entity_name: String, entity_id: String, fields: Array) -> EntityChange {
+        let fields = fields.into_iter().map(|e| e.cast()).collect::<Vec<_>>();
         EntityChange {
             entity: entity_name,
             id: entity_id,
@@ -97,7 +92,7 @@ fn dynamic_into_subgraph_value(value: Dynamic, variant: &str) -> Option<Value> {
                 .into_iter()
                 .filter_map(|item| dynamic_into_subgraph_value(item, variant))
                 .collect::<Vec<_>>();
-            return as_value!(Array, Array { value });
+            return as_value!(Array, SfArray { value });
         }
     } else {
         let value = value.into_string();
