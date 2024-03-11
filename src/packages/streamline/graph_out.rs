@@ -12,6 +12,7 @@ pub mod graph_out {
 
     pub type SubgraphFieldChange = Field;
 
+    #[rhai_fn(global)]
     pub fn create_entity(
         entity_name: String,
         entity_id: String,
