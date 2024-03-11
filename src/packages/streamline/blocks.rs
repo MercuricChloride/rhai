@@ -13,8 +13,8 @@ pub mod blocks {
     }
 
     #[rhai_fn(get = "number", pure)]
-    pub fn number(block: &mut EthBlock) -> u64 {
-        block.number
+    pub fn number(block: &mut EthBlock) -> Dynamic {
+        block.number.to_string().into()
     }
 
     #[rhai_fn(get = "hash", pure)]
