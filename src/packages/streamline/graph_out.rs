@@ -1,4 +1,4 @@
-use crate::{plugin::*, Array, Scope};
+use crate::{plugin::*, Array, Map as Obj, Scope};
 use core::convert::TryFrom;
 use core::str::FromStr;
 use num_traits::ToPrimitive;
@@ -7,6 +7,12 @@ use substreams_entity_change::pb::entity::value::Typed;
 
 use substreams_entity_change::pb::entity::{Array as SfArray, EntityChange, Field, Value};
 
+macro_rules! set {
+    ($map:ident, $key:expr, $val:expr) => {
+        $map.insert($key.into(), $val.into());
+    };
+}
+
 #[export_module]
 pub mod graph_out {
     use substreams_entity_change::pb::entity::entity_change::Operation;
@@ -14,49 +20,42 @@ pub mod graph_out {
     pub type SubgraphFieldChange = Field;
 
     #[rhai_fn(global)]
-    pub fn create_entity(entity_name: String, entity_id: String, fields: Array) -> EntityChange {
-        let fields = fields.into_iter().map(|e| e.cast()).collect::<Vec<_>>();
-        EntityChange {
-            entity: entity_name,
-            id: entity_id,
-            ordinal: 0,
-            operation: Operation::Create.into(),
-            fields,
-        }
+    pub fn create_entity(entity_name: String, entity_id: String, fields: Array) -> Dynamic {
+        let mut obj = Obj::new();
+        set!(obj, "entity", entity_name);
+        set!(obj, "id", entity_id);
+        set!(obj, "operation", (Operation::Create as i64));
+        set!(obj, "fields", fields);
+        obj.into()
     }
 
     #[rhai_fn(global)]
-    pub fn update_entity(entity_name: String, entity_id: String, fields: Array) -> EntityChange {
-        let fields = fields.into_iter().map(|e| e.cast()).collect::<Vec<_>>();
-        EntityChange {
-            entity: entity_name,
-            id: entity_id,
-            ordinal: 0,
-            operation: Operation::Update.into(),
-            fields,
-        }
+    pub fn update_entity(entity_name: String, entity_id: String, fields: Array) -> Dynamic {
+        let mut obj = Obj::new();
+        set!(obj, "entity", entity_name);
+        set!(obj, "id", entity_id);
+        set!(obj, "operation", (Operation::Update as i64));
+        set!(obj, "fields", fields);
+        obj.into()
     }
 
     #[rhai_fn(global)]
-    pub fn delete_entity(entity_name: String, entity_id: String) -> EntityChange {
-        EntityChange {
-            entity: entity_name,
-            id: entity_id,
-            ordinal: 0,
-            operation: Operation::Delete.into(),
-            fields: vec![],
-        }
+    pub fn delete_entity(entity_name: String, entity_id: String) -> Dynamic {
+        let mut obj = Obj::new();
+        set!(obj, "entity", entity_name);
+        set!(obj, "id", entity_id);
+        set!(obj, "operation", (Operation::Delete as i64));
+        obj.into()
     }
 
     #[rhai_fn(global)]
-    pub fn field_change(name: String, value: Dynamic, variant: String) -> Field {
-        let new_value = dynamic_into_subgraph_value(value, &variant);
-        println!("{:?}", &new_value);
-        Field {
-            name,
-            old_value: None,
-            new_value,
-        }
+    pub fn field_change(name: String, value: Dynamic, variant: String) -> Dynamic {
+        let mut obj = Obj::new();
+        set!(obj, "name", name);
+        set!(obj, "new_value", value);
+        set!(obj, "subgraph_variant", variant);
+
+        obj.into()
     }
 }
 
@@ -66,68 +65,6 @@ macro_rules! as_value {
             typed: Some(Typed::$variant($value)),
         })
     };
-}
-
-fn dynamic_into_subgraph_value(value: Dynamic, variant: &str) -> Option<Value> {
-    let error_msg = format!(
-        "Failed converting value {:?}, into a subgraph type!",
-        &value
-    );
-
-    if value.is_bool() {
-        let value: bool = value.cast();
-        return as_value!(Bool, value);
-    }
-
-    if value.is_int() {
-        let value = value.as_int().ok().and_then(|value| value.to_i32());
-        if let Some(value) = value {
-            return as_value!(Int32, value);
-        }
-    }
-
-    if value.is_array() {
-        if let Ok(value) = value.into_array() {
-            let value = value
-                .into_iter()
-                .filter_map(|item| dynamic_into_subgraph_value(item, variant))
-                .collect::<Vec<_>>();
-            return as_value!(Array, SfArray { value });
-        }
-    } else {
-        let value = value.into_string();
-
-        if let Ok(value) = value {
-            match variant {
-                "Address" => {
-                    return as_value!(Bytes, value);
-                }
-                "BigInt" => {
-                    let as_bigint = BigInt::from_str(&value).ok()?;
-                    return as_value!(Bigint, as_bigint.to_string());
-                }
-                "BigDecimal" => {
-                    todo!("Big decimal isn't supported yet!");
-                    //let as_bigint = BigInt::from_str(&value).ok()?;
-                    //return as_value!(Bigint, as_bigint.to_string());
-                }
-                "String" => {
-                    return as_value!(String, value);
-                }
-                "Bytes" => {
-                    return as_value!(Bytes, value);
-                }
-                // if it ends with :Ref, it is a foreign key
-                s if s.ends_with(":Ref") => {
-                    return as_value!(String, value);
-                }
-                _ => {}
-            }
-        }
-    }
-    println!("{}", &error_msg);
-    substreams::log::println(error_msg);
-    None
 }
 
 pub fn init_globals(engine: &mut Engine, _scope: &mut Scope) {
