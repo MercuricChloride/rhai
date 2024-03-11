@@ -1,19 +1,10 @@
-use crate::serde::from_dynamic;
 use crate::{plugin::*, Scope};
-use core::cell::RefCell;
-use core::convert::TryInto;
 use core::str::FromStr;
 use num_traits::ToPrimitive;
-use serde::{Deserialize, Serialize};
-use std::rc::Rc;
-use std::sync::Arc;
-use std::{collections::BTreeMap, fs};
 use substreams::scalar::BigInt;
-use substreams::Hex;
 use substreams_entity_change::pb::entity::value::Typed;
 
 use substreams_entity_change::pb::entity::{Array, EntityChange, Field, Value};
-use substreams_entity_change::tables::{Row, Tables};
 
 #[export_module]
 pub mod graph_out {
@@ -63,10 +54,12 @@ pub mod graph_out {
 
     #[rhai_fn(global)]
     pub fn field_change(name: String, value: Dynamic, variant: String) -> Field {
+        let new_value = dynamic_into_subgraph_value(value, &variant);
+        println!("{:?}", &new_value);
         Field {
             name,
             old_value: None,
-            new_value: dynamic_into_subgraph_value(value, &variant),
+            new_value,
         }
     }
 }
@@ -136,6 +129,7 @@ fn dynamic_into_subgraph_value(value: Dynamic, variant: &str) -> Option<Value> {
             }
         }
     }
+    println!("{}", &error_msg);
     substreams::log::println(error_msg);
     None
 }

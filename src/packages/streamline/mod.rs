@@ -30,7 +30,22 @@ pub fn init_package(mut engine: Engine, mut scope: Scope) -> (Engine, Scope) {
 fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     modules::init_globals(engine, scope);
     #[cfg(not(feature = "substreams_runtime"))]
-    abi::init_globals(engine, scope);
+    {
+        abi::init_globals(engine, scope);
+    }
     blocks::init_globals(engine, scope);
     graph_out::init_globals(engine, scope);
+
+    engine.on_print(|s| {
+        if cfg!(feature = "substreams_runtime") {
+            substreams::log::println(&s);
+        }
+        println!("{}", s);
+    });
+    engine.on_debug(|text, _, _| {
+        if cfg!(feature = "substreams_runtime") {
+            substreams::log::println(&text);
+        }
+        println!("{}", text);
+    });
 }
