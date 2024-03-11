@@ -110,23 +110,27 @@ fn dynamic_into_subgraph_value(value: Dynamic, variant: &str) -> Option<Value> {
 
         if let Ok(value) = value {
             match variant {
-                "ADDRESS" => {
+                "Address" => {
                     return as_value!(Bytes, value);
                 }
-                "BIGINT" => {
+                "BigInt" => {
                     let as_bigint = BigInt::from_str(&value).ok()?;
                     return as_value!(Bigint, as_bigint.to_string());
                 }
-                "BIGDECIMAL" => {
+                "BigDecimal" => {
                     todo!("Big decimal isn't supported yet!");
                     //let as_bigint = BigInt::from_str(&value).ok()?;
                     //return as_value!(Bigint, as_bigint.to_string());
                 }
-                "STRING" => {
+                "String" => {
                     return as_value!(String, value);
                 }
-                "BYTES" => {
+                "Bytes" => {
                     return as_value!(Bytes, value);
+                }
+                // if it ends with :Ref, it is a foreign key
+                s if s.ends_with(":Ref") => {
+                    return as_value!(String, value);
                 }
                 _ => {}
             }
