@@ -183,8 +183,10 @@ impl ModuleData {
     pub fn store_kind(&self) -> Option<&'static str> {
         if let Some(update_policy) = &self.update_policy {
             match update_policy {
-                UpdatePolicy::Set => return Some(""),
-                UpdatePolicy::SetIfNotExists => return Some(""),
+                UpdatePolicy::Set => return Some("StoreSetProto<JsonStruct>"),
+                UpdatePolicy::SetIfNotExists => {
+                    return Some("StoreSetIfNotExistsProto<JsonStruct>")
+                }
             }
         }
         None
