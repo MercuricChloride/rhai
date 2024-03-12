@@ -8,6 +8,7 @@ pub mod rust {
 
     trait Generate {
         fn generate(&self) -> String;
+        fn generate_formatters(&self) -> Option<String>;
     }
 
     impl Generate for ModuleInput {
@@ -30,6 +31,22 @@ pub mod rust {
                 ModuleInput::Source { source } => "block: EthBlock".to_string(),
             }
         }
+
+        fn generate_formatters(&self) -> Option<String> {
+            match self {
+                ModuleInput::Store { store: name, mode } => {
+                    if mode.as_str() == "deltas" {
+                        return Some(format!("let {name} = Rc::new({name});"));
+                    }
+
+                    if mode.as_str() == "get" {
+                        return Some(format!("let {name} = Rc::new({name});"));
+                    }
+                }
+                _ => {}
+            }
+            None
+        }
     }
 
     impl Generate for &Vec<ModuleInput> {
@@ -39,13 +56,31 @@ pub mod rust {
                 .collect::<Vec<_>>()
                 .join(", ")
         }
+
+        fn generate_formatters(&self) -> Option<String> {
+            let formatters = self
+                .iter()
+                .filter_map(|i| i.generate_formatters())
+                .collect::<Vec<_>>();
+
+            if formatters.is_empty() {
+                None
+            } else {
+                Some(formatters.join("\n"))
+            }
+        }
     }
 
     pub fn generate_streamline_modules(modules: &Vec<&ModuleData>) -> String {
         modules.iter().fold(String::new(), |acc, e| {
             let module_code = match e.kind() {
                 ModuleKind::Map => generate_mfn(e.name(), e.inputs(), e.handler()),
-                ModuleKind::Store => generate_sfn(e.name(), e.inputs(), e.handler()),
+                ModuleKind::Store => {
+                    let store_kind = e
+                        .store_kind()
+                        .expect("Tried to get store_kind for a module that wasn't set / setOnce");
+                    generate_sfn(e.name(), store_kind, e.inputs(), e.handler())
+                }
                 _ => "".to_string(),
             };
             format!("{acc}{module_code}")
@@ -55,6 +90,11 @@ pub mod rust {
     fn generate_mfn(name: &str, inputs: &Vec<ModuleInput>, handler: &str) -> String {
         // The rust fn inputs
         let module_inputs = inputs.generate();
+        let formatters = if let Some(val) = inputs.generate_formatters() {
+            val
+        } else {
+            String::new()
+        };
 
         let arg_names = inputs.iter().map(|input| input.name()).collect::<Vec<_>>();
 
@@ -68,6 +108,7 @@ pub mod rust {
             r#"
 #[substreams::handlers::map]
 fn {name}({module_inputs}) -> Option<JsonStruct> {{
+    {formatters}
     let (mut engine, mut scope) = engine_init!();
     register_builtins(&mut engine);
     let ast = engine.compile(RHAI_SCRIPT).unwrap();
@@ -85,12 +126,19 @@ fn {name}({module_inputs}) -> Option<JsonStruct> {{
         )
     }
 
-    fn generate_sfn(name: &str, inputs: &Vec<ModuleInput>, handler: &str) -> String {
+    fn generate_sfn(
+        name: &str,
+        store_kind: &str,
+        inputs: &Vec<ModuleInput>,
+        handler: &str,
+    ) -> String {
         let module_inputs = inputs.generate();
+        let formatters = if let Some(val) = inputs.generate_formatters() {
+            val
+        } else {
+            String::new()
+        };
         let arg_names = inputs.iter().map(|input| input.name()).collect::<Vec<_>>();
-
-        //let store_kind = "StoreSetIfNotExistsProto<JsonStruct>";
-        let store_kind = "StoreSetProto<JsonStruct>";
 
         let args = inputs
             .iter()
@@ -103,6 +151,7 @@ fn {name}({module_inputs}) -> Option<JsonStruct> {{
 #[substreams::handlers::store]
 fn {name}({module_inputs}, streamline_store_param: {store_kind}) {{
     let streamline_store_param = Rc::new(streamline_store_param);
+    {formatters}
     let (mut engine, mut scope) = engine_init!();
     register_builtins(&mut engine);
     let ast = engine.compile(RHAI_SCRIPT).unwrap();

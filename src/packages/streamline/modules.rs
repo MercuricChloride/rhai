@@ -180,6 +180,16 @@ impl ModuleData {
         &self.kind
     }
 
+    pub fn store_kind(&self) -> Option<&'static str> {
+        if let Some(update_policy) = &self.update_policy {
+            match update_policy {
+                UpdatePolicy::Set => return Some(""),
+                UpdatePolicy::SetIfNotExists => return Some(""),
+            }
+        }
+        None
+    }
+
     pub fn handler(&self) -> &str {
         &self.rhai_handler
     }
@@ -267,7 +277,7 @@ impl ModuleDag {
         let update_policy = match update_policy.as_str() {
             "set" => UpdatePolicy::Set,
             "setOnce" => UpdatePolicy::SetIfNotExists,
-            _ => panic!("Unknown update policy!")
+            _ => panic!("Unknown update policy!"),
         };
 
         let input_names = inputs
@@ -307,8 +317,10 @@ impl ModuleDag {
             })
             .collect::<Vec<_>>();
 
-        self.modules
-            .insert(name.clone(), ModuleData::new_sfn(name, inputs, update_policy));
+        self.modules.insert(
+            name.clone(),
+            ModuleData::new_sfn(name, inputs, update_policy),
+        );
     }
 
     pub fn get_module(&self, name: &str) -> Option<&ModuleData> {
@@ -370,12 +382,15 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     });
 
     let modules = module_dag.clone();
-    engine.register_fn("add_sfn", move |name: Dynamic, inputs: Dynamic, update_policy: String| {
-        let name = from_dynamic(&name).unwrap();
-        let inputs = from_dynamic(&inputs).unwrap();
-        (*modules).borrow_mut().add_sfn(name, inputs, update_policy);
-        "Added sfn to DAG!".to_string()
-    });
+    engine.register_fn(
+        "add_sfn",
+        move |name: Dynamic, inputs: Dynamic, update_policy: String| {
+            let name = from_dynamic(&name).unwrap();
+            let inputs = from_dynamic(&inputs).unwrap();
+            (*modules).borrow_mut().add_sfn(name, inputs, update_policy);
+            "Added sfn to DAG!".to_string()
+        },
+    );
 
     let modules = module_dag.clone();
     engine.register_fn("generate_yaml", move |path: String| {
