@@ -112,6 +112,7 @@ impl Default for ModuleOutput {
 pub enum UpdatePolicy {
     Set,
     SetIfNotExists,
+    Add,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -187,6 +188,7 @@ impl ModuleData {
                 UpdatePolicy::SetIfNotExists => {
                     return Some("StoreSetIfNotExistsProto<JsonStruct>")
                 }
+                UpdatePolicy::Add => return Some("StoreAddBigInt"),
             }
         }
         None
@@ -279,6 +281,7 @@ impl ModuleDag {
         let update_policy = match update_policy.as_str() {
             "set" => UpdatePolicy::Set,
             "setOnce" => UpdatePolicy::SetIfNotExists,
+            "add" => UpdatePolicy::Add,
             _ => panic!("Unknown update policy!"),
         };
 
