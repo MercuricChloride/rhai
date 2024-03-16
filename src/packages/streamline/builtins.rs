@@ -192,7 +192,8 @@ impl TypeRegister for BigInt {
                 } else {
                     Dynamic::from(())
                 }
-            });
+            })
+            .register_fn("to_string", |x: BigInt| x.to_string());
     }
 }
 
