@@ -58,7 +58,7 @@ impl TypeRegister for Rc<Deltas<DeltaProto<JsonValue>>> {
     fn register_types(engine: &mut Engine) {
         engine.register_type::<Self>().register_get(
             "deltas",
-            |obj: &mut Deltas<DeltaProto<JsonValue>>| {
+            |obj: &mut Rc<Deltas<DeltaProto<JsonValue>>>| {
                 let deltas = obj
                     .deltas
                     .iter()
@@ -91,9 +91,9 @@ impl TypeRegister for Rc<Deltas<DeltaProto<JsonValue>>> {
 
 impl TypeRegister for Rc<Deltas<DeltaBigInt>> {
     fn register_types(engine: &mut Engine) {
-        engine
-            .register_type::<Self>()
-            .register_get("deltas", |obj: &mut Deltas<DeltaBigInt>| {
+        engine.register_type::<Self>().register_get(
+            "deltas",
+            |obj: &mut Rc<Deltas<DeltaBigInt>>| {
                 let deltas = obj
                     .deltas
                     .iter()
@@ -119,7 +119,8 @@ impl TypeRegister for Rc<Deltas<DeltaBigInt>> {
                     })
                     .collect::<Vec<Dynamic>>();
                 Dynamic::from_array(deltas)
-            });
+            },
+        );
     }
 }
 
