@@ -15,15 +15,15 @@ pub mod rust {
         fn generate(&self) -> String {
             match self {
                 ModuleInput::Map { map: name } => {
-                    format!("{name}: JsonStruct")
+                    format!("{name}: JsonValue")
                 }
 
                 ModuleInput::Store { store: name, mode } => match mode.as_str() {
                     "get" => {
-                        format!("{name}: StoreGetProto<JsonStruct>")
+                        format!("{name}: StoreGetProto<JsonValue>")
                     }
                     "deltas" => {
-                        format!("{name}: Deltas<DeltaProto<JsonStruct>>")
+                        format!("{name}: Deltas<DeltaProto<JsonValue>>")
                     }
                     _ => panic!("Unknown mode"),
                 },
@@ -107,7 +107,7 @@ pub mod rust {
         format!(
             r#"
 #[substreams::handlers::map]
-fn {name}({module_inputs}) -> Option<JsonStruct> {{
+fn {name}({module_inputs}) -> Option<JsonValue> {{
     {formatters}
     let (mut engine, mut scope) = engine_init!();
     register_builtins(&mut engine);

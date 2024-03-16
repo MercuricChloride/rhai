@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use super::codegen;
 
-const JSON_PROTO: &str = "proto:google.protobuf.Struct";
+const JSON_VALUE_PROTO: &str = "proto:google.protobuf.Value";
 
 enum AccessMode {
     Get,
@@ -102,7 +102,7 @@ pub struct ModuleOutput {
 impl Default for ModuleOutput {
     fn default() -> Self {
         Self {
-            kind: JSON_PROTO.to_string(),
+            kind: JSON_VALUE_PROTO.to_string(),
         }
     }
 }
@@ -151,7 +151,7 @@ impl ModuleData {
             inputs,
             output: None,
             update_policy: Some(update_policy),
-            value_type: Some(JSON_PROTO.to_string()),
+            value_type: Some(JSON_VALUE_PROTO.to_string()),
         }
     }
 
@@ -184,10 +184,8 @@ impl ModuleData {
     pub fn store_kind(&self) -> Option<&'static str> {
         if let Some(update_policy) = &self.update_policy {
             match update_policy {
-                UpdatePolicy::Set => return Some("StoreSetProto<JsonStruct>"),
-                UpdatePolicy::SetIfNotExists => {
-                    return Some("StoreSetIfNotExistsProto<JsonStruct>")
-                }
+                UpdatePolicy::Set => return Some("StoreSetProto<JsonValue>"),
+                UpdatePolicy::SetIfNotExists => return Some("StoreSetIfNotExistsProto<JsonValue>"),
                 UpdatePolicy::Add => return Some("StoreAddBigInt"),
             }
         }
@@ -210,22 +208,6 @@ impl ModuleDag {
 
         module_map.insert("BLOCK".to_string(), ModuleData::eth_block());
 
-        // module_map.insert(
-        //     "map_events".to_string(),
-        //     ModuleData {
-        //         name: "map_events".to_string(),
-        //         rhai_handler: "map_events".to_string(),
-        //         kind: ModuleKind::Map,
-        //         inputs: vec![ModuleInput::Map {
-        //             map: "source".to_string(),
-        //         }],
-        //         output: Some(ModuleOutput {
-        //             kind: JSON_PROTO.to_string(),
-        //         }),
-        //         update_policy: None,
-        //         value_type: None,
-        //     },
-        // );
         Self {
             modules: module_map,
         }
@@ -343,8 +325,6 @@ pub type GlobalModuleDag = Rc<RefCell<ModuleDag>>;
 /// The `Modules` module provides functionality for managing the module dependency graph.
 #[export_module]
 pub mod module_api {
-    use crate::Array;
-
     /// The `Modules` module provides functionality for managing the module dependency graph.
     pub type Modules = GlobalModuleDag;
 
@@ -424,39 +404,3 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
 
     scope.push_constant("MODULES", module_dag);
 }
-
-// engine.on_parse_token(|token, _, _| {
-//     match token {
-//         // If we have a address literal that is 42 characters long, we want to convert it to an address type
-//         Token::Identifier(s) if s.starts_with("0x") && s.len() == 42 => {
-//             //let replacement = format!("address({s})");
-//             let replacement = format!("print(123457890)");
-//             Token::Identifier(Box::new(replacement.into()))
-//         }
-//         Token::Custom(value) => {
-//             panic!("CUSTOM VALUE")
-//         }
-//         _ => token
-//     }
-// });
-
-// mod test {
-//     use super::*;
-
-//     #[test]
-//     fn test_serialize() {
-//         let data = ModuleData {
-//             name: "test".to_string(),
-//             kind: ModuleKind::Map,
-//             inputs: vec![ModuleInput::Map {
-//                 map: "map_events".to_string(),
-//             }],
-//             output: Some(ModuleOutput {
-//                 kind: "proto:google.wkt.struct".to_string(),
-//             }),
-//             update_policy: None,
-//         };
-//         let as_json = serde_yaml::to_string(&data).unwrap();
-//         println!("{as_json}");
-//     }
-// }
