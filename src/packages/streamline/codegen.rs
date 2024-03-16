@@ -110,7 +110,6 @@ pub mod rust {
 fn {name}({module_inputs}) -> Option<JsonValue> {{
     {formatters}
     let (mut engine, mut scope) = engine_init!();
-    register_builtins(&mut engine);
     let ast = engine.compile(RHAI_SCRIPT).unwrap();
     let result: Dynamic = engine.call_fn(&mut scope, &ast, "{handler}", ({args})).expect("Call failed");
     let mut output_map = Map::new();
@@ -153,7 +152,6 @@ fn {name}({module_inputs}, streamline_store_param: {store_kind}) {{
     let streamline_store_param = Rc::new(streamline_store_param);
     {formatters}
     let (mut engine, mut scope) = engine_init!();
-    register_builtins(&mut engine);
     let ast = engine.compile(RHAI_SCRIPT).unwrap();
     let result:Dynamic = engine.call_fn(&mut scope, &ast, "{handler}", ({args}, streamline_store_param)).expect("Call failed");
 }}
