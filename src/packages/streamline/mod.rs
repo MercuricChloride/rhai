@@ -6,7 +6,8 @@ use rhai_codegen::combine_with_exported_module;
 
 mod abi;
 mod blocks;
-mod builtins;
+/// Adds Substreams types to the Rhai Runtime
+pub mod builtins;
 mod codegen;
 mod graph_out;
 /// A plugin to handle the dag of substreams modules

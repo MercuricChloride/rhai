@@ -21,6 +21,7 @@ use substreams_ethereum::Event;
 type JsonValue = prost_wkt_types::Value;
 type EthBlock = substreams_ethereum::pb::eth::v2::Block;
 
+/// Extracts events of type T, from a block
 pub fn get_events<T>(block: &mut EthBlock) -> Vec<Dynamic>
 where
     T: Sized + Event + Clone + Serialize,
@@ -304,6 +305,7 @@ impl TypeRegister for Rc<StoreAddBigInt> {
     }
 }
 
+/// Registers the builtin types with the engine
 pub fn register_builtins(engine: &mut Engine) {
     <Vec<u8>>::register_types(engine);
     <BigInt>::register_types(engine);
