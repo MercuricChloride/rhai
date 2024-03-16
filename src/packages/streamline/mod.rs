@@ -1,9 +1,12 @@
+use self::builtins::register_builtins;
+
 use super::{Package, StandardPackage};
 use crate::{def_package, Array, Engine, Scope};
 use rhai_codegen::combine_with_exported_module;
 
 mod abi;
 mod blocks;
+mod builtins;
 mod codegen;
 mod graph_out;
 /// A plugin to handle the dag of substreams modules
@@ -23,6 +26,7 @@ pub fn init_package(mut engine: Engine, mut scope: Scope) -> (Engine, Scope) {
     let package = StreamlinePackage::new();
     package.register_into_engine(&mut engine);
     init_globals(&mut engine, &mut scope);
+    register_builtins(&mut engine);
     (engine, scope)
 }
 
