@@ -54,7 +54,7 @@ trait TypeRegister {
     fn register_types(engine: &mut Engine);
 }
 
-impl TypeRegister for Deltas<DeltaProto<JsonValue>> {
+impl TypeRegister for Rc<Deltas<DeltaProto<JsonValue>>> {
     fn register_types(engine: &mut Engine) {
         engine.register_type::<Self>().register_get(
             "deltas",
@@ -89,7 +89,7 @@ impl TypeRegister for Deltas<DeltaProto<JsonValue>> {
     }
 }
 
-impl TypeRegister for Deltas<DeltaBigInt> {
+impl TypeRegister for Rc<Deltas<DeltaBigInt>> {
     fn register_types(engine: &mut Engine) {
         engine
             .register_type::<Self>()
@@ -366,8 +366,8 @@ pub fn register_builtins(engine: &mut Engine) {
     <Vec<u8>>::register_types(engine);
     <BigInt>::register_types(engine);
     <JsonValue>::register_types(engine);
-    <Deltas<DeltaProto<JsonValue>>>::register_types(engine);
-    <Deltas<DeltaBigInt>>::register_types(engine);
+    <Rc<Deltas<DeltaProto<JsonValue>>>>::register_types(engine);
+    <Rc<Deltas<DeltaBigInt>>>::register_types(engine);
     <Rc<StoreSetProto<JsonValue>>>::register_types(engine);
     <Rc<StoreSetIfNotExistsProto<JsonValue>>>::register_types(engine);
     <Rc<StoreGetProto<JsonValue>>>::register_types(engine);
