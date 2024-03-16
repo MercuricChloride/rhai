@@ -56,9 +56,9 @@ trait TypeRegister {
 
 impl TypeRegister for Rc<Deltas<DeltaProto<JsonValue>>> {
     fn register_types(engine: &mut Engine) {
-        engine.register_type::<Self>().register_get(
-            "deltas",
-            |obj: &mut Rc<Deltas<DeltaProto<JsonValue>>>| {
+        engine
+            .register_type::<Self>()
+            .register_get("deltas", |obj: &mut Rc<Deltas<DeltaProto<JsonValue>>>| {
                 let deltas = obj
                     .deltas
                     .iter()
@@ -76,51 +76,50 @@ impl TypeRegister for Rc<Deltas<DeltaProto<JsonValue>>> {
                         obj.insert("ordinal".into(), (delta.ordinal as i64).into());
                         obj.insert("key".into(), delta.key.clone().into());
                         obj.insert(
-                            "oldValue".into(),
+                            "old_value".into(),
                             to_dynamic(delta.old_value.clone()).unwrap(),
                         );
-                        obj.insert("newValue".into(), Dynamic::from_map(new_value));
+                        obj.insert("new_value".into(), Dynamic::from_map(new_value));
                         Dynamic::from_map(obj)
                     })
                     .collect::<Vec<Dynamic>>();
                 Dynamic::from_array(deltas)
-            },
-        );
+            })
+            .register_indexer_get(|obj: &mut Rc<Deltas<DeltaProto<JsonValue>>>, index: i64| {
+                obj.clone().deltas[index as usize].clone()
+            });
     }
 }
 
 impl TypeRegister for Rc<Deltas<DeltaBigInt>> {
     fn register_types(engine: &mut Engine) {
-        engine.register_type::<Self>().register_get(
-            "deltas",
-            |obj: &mut Rc<Deltas<DeltaBigInt>>| {
+        engine
+            .register_type::<Self>()
+            .register_get("deltas", |obj: &mut Rc<Deltas<DeltaBigInt>>| {
                 let deltas = obj
                     .deltas
                     .iter()
                     .map(|delta| {
-                        //let old_value = serde_json::to_string(&delta.old_value).unwrap();
-                        //let old_value: serde_json::Map<_, _> =
-                        //serde_json::from_str(&old_value).unwrap();
-                        //let old_value: rhai::Map = serde_json::from_value(old_value).unwrap();
-
                         let new_value = serde_json::to_value(&delta.new_value.to_string()).unwrap();
-                        let new_value: Map = serde_json::from_value(new_value).unwrap();
+                        let new_value: Dynamic = serde_json::from_value(new_value).unwrap();
 
                         let mut obj = Map::new();
                         obj.insert("operation".into(), (delta.operation as i64).into());
                         obj.insert("ordinal".into(), (delta.ordinal as i64).into());
                         obj.insert("key".into(), delta.key.clone().into());
                         obj.insert(
-                            "oldValue".into(),
+                            "old_value".into(),
                             to_dynamic(delta.old_value.to_string()).unwrap(),
                         );
-                        obj.insert("newValue".into(), Dynamic::from_map(new_value));
+                        obj.insert("new_value".into(), new_value);
                         Dynamic::from_map(obj)
                     })
                     .collect::<Vec<Dynamic>>();
                 Dynamic::from_array(deltas)
-            },
-        );
+            })
+            .register_indexer_get(|obj: &mut Rc<Deltas<DeltaBigInt>>, index: i64| {
+                obj.clone().deltas[index as usize].clone()
+            });
     }
 }
 
@@ -238,7 +237,7 @@ impl TypeRegister for Rc<StoreSetProto<JsonValue>> {
         engine
             .register_type_with_name::<Rc<StoreSetProto<JsonValue>>>("StoreSet")
             .register_fn("set", set_fn)
-            .register_fn("setMany", set_many_fn)
+            .register_fn("set_many", set_many_fn)
             .register_fn("delete_prefix", delete_fn);
     }
 }
@@ -282,10 +281,10 @@ impl TypeRegister for Rc<StoreSetIfNotExistsProto<JsonValue>> {
         engine
             .register_type_with_name::<StoreSetOnce>("StoreSetOnce")
             .register_fn("set", set_fn)
-            .register_fn("setOnce", set_fn)
-            .register_fn("setMany", set_many_fn)
-            .register_fn("setOnceMany", set_many_fn)
-            .register_fn("deletePrefix", delete_fn);
+            .register_fn("set_once", set_fn)
+            .register_fn("set_many", set_many_fn)
+            .register_fn("set_once_many", set_many_fn)
+            .register_fn("delete_prefix", delete_fn);
     }
 }
 
