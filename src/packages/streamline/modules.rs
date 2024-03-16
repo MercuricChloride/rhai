@@ -28,9 +28,18 @@ pub enum ModuleKind {
 #[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum ModuleInput {
-    Map { map: String },
-    Store { store: String, mode: String },
-    Source { source: String },
+    Map {
+        map: String,
+    },
+    Store {
+        store: String,
+        mode: String,
+        #[serde(skip)]
+        value_type: String,
+    },
+    Source {
+        source: String,
+    },
 }
 
 impl<'de> Deserialize<'de> for ModuleInput {
@@ -52,7 +61,11 @@ impl<'de> Deserialize<'de> for ModuleInput {
                             "store" => {
                                 let store = value["name"].as_str().unwrap().to_string();
                                 let mode = value["mode"].as_str().unwrap_or("get").to_string();
-                                Ok(ModuleInput::Store { store, mode })
+                                Ok(ModuleInput::Store {
+                                    store,
+                                    mode,
+                                    value_type: String::new(),
+                                })
                             }
                             "source" => Ok(ModuleInput::eth_block()),
                             _ => panic!("Unknown module kind"),
@@ -71,19 +84,23 @@ impl ModuleInput {
         Self::Map { map }
     }
 
-    pub fn store(store: String, mode: AccessMode) -> Self {
+    pub fn store(store: String, mode: AccessMode, value_type: String) -> Self {
         let mode = match mode {
             AccessMode::Get => "get".to_string(),
             AccessMode::Deltas => "deltas".to_string(),
         };
-        Self::Store { store, mode }
+        Self::Store {
+            store,
+            mode,
+            value_type,
+        }
     }
 
     pub fn name(&self) -> String {
         match self {
             ModuleInput::Map { map } => map.to_string(),
-            ModuleInput::Store { store, mode: _ } => store.to_string(),
-            ModuleInput::Source { source: _ } => "block".to_string(),
+            ModuleInput::Store { store, .. } => store.to_string(),
+            ModuleInput::Source { .. } => "block".to_string(),
         }
     }
 
@@ -259,7 +276,13 @@ impl ModuleDag {
             })
             .map(|(module, access_mode)| match module.kind() {
                 ModuleKind::Map => ModuleInput::map(module.name().to_string()),
-                ModuleKind::Store => ModuleInput::store(module.name().to_string(), access_mode),
+                ModuleKind::Store => {
+                    let value_type = match module.update_policy.unwrap() {
+                        UpdatePolicy::Set | UpdatePolicy::SetIfNotExists => "JsonValue".to_string(),
+                        UpdatePolicy::Add => "BigInt".to_string(),
+                    };
+                    ModuleInput::store(module.name().to_string(), access_mode, value_type)
+                }
                 ModuleKind::Source => ModuleInput::eth_block(),
             })
             .collect::<Vec<_>>();
@@ -308,7 +331,13 @@ impl ModuleDag {
             })
             .map(|(module, access_mode)| match module.kind() {
                 ModuleKind::Map => ModuleInput::map(module.name().to_string()),
-                ModuleKind::Store => ModuleInput::store(module.name().to_string(), access_mode),
+                ModuleKind::Store => {
+                    let value_type = match module.update_policy.unwrap() {
+                        UpdatePolicy::Set | UpdatePolicy::SetIfNotExists => "JsonValue".to_string(),
+                        UpdatePolicy::Add => "BigInt".to_string(),
+                    };
+                    ModuleInput::store(module.name().to_string(), access_mode, value_type)
+                }
                 ModuleKind::Source => ModuleInput::eth_block(),
             })
             .collect::<Vec<_>>();

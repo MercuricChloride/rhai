@@ -18,13 +18,19 @@ pub mod rust {
                     format!("{name}: JsonValue")
                 }
 
-                ModuleInput::Store { store: name, mode } => match mode.as_str() {
-                    "get" => {
-                        format!("{name}: StoreGetProto<JsonValue>")
-                    }
-                    "deltas" => {
-                        format!("{name}: Deltas<DeltaProto<JsonValue>>")
-                    }
+                ModuleInput::Store {
+                    store: name,
+                    mode,
+                    value_type,
+                } => match mode.as_str() {
+                    "get" => match value_type.as_str() {
+                        "BigInt" => format!("{name}: StoreGetBigInt"),
+                        _ => format!("{name}: StoreGetProto<JsonValue>"),
+                    },
+                    "deltas" => match value_type.as_str() {
+                        "BigInt" => format!("{name}: Deltas<DeltaBigInt>"),
+                        _ => format!("{name}: Deltas<DeltaProto<JsonValue>>"),
+                    },
                     _ => panic!("Unknown mode"),
                 },
 
@@ -34,7 +40,9 @@ pub mod rust {
 
         fn generate_formatters(&self) -> Option<String> {
             match self {
-                ModuleInput::Store { store: name, mode } => {
+                ModuleInput::Store {
+                    store: name, mode, ..
+                } => {
                     if mode.as_str() == "deltas" {
                         return Some(format!("let {name} = Rc::new({name});"));
                     }
@@ -147,11 +155,18 @@ fn {name}({module_inputs}) -> Option<JsonValue> {{
         } else {
             String::new()
         };
-        let arg_names = inputs.iter().map(|input| input.name()).collect::<Vec<_>>();
-
         let args = inputs
             .iter()
-            .map(|input| input.name())
+            .map(|input| {
+                let name = input.name();
+                match &input {
+                    ModuleInput::Map { .. } => {
+                        format!("to_dynamic(serde_json::to_value({name}).unwrap()).unwrap()")
+                    }
+                    ModuleInput::Store { .. } => name,
+                    ModuleInput::Source { .. } => name,
+                }
+            })
             .collect::<Vec<_>>()
             .join(", ");
 

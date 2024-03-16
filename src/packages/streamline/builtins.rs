@@ -89,6 +89,40 @@ impl TypeRegister for Deltas<DeltaProto<JsonValue>> {
     }
 }
 
+impl TypeRegister for Deltas<DeltaBigInt> {
+    fn register_types(engine: &mut Engine) {
+        engine
+            .register_type::<Self>()
+            .register_get("deltas", |obj: &mut Deltas<DeltaBigInt>| {
+                let deltas = obj
+                    .deltas
+                    .iter()
+                    .map(|delta| {
+                        //let old_value = serde_json::to_string(&delta.old_value).unwrap();
+                        //let old_value: serde_json::Map<_, _> =
+                        //serde_json::from_str(&old_value).unwrap();
+                        //let old_value: rhai::Map = serde_json::from_value(old_value).unwrap();
+
+                        let new_value = serde_json::to_value(&delta.new_value.to_string()).unwrap();
+                        let new_value: Map = serde_json::from_value(new_value).unwrap();
+
+                        let mut obj = Map::new();
+                        obj.insert("operation".into(), (delta.operation as i64).into());
+                        obj.insert("ordinal".into(), (delta.ordinal as i64).into());
+                        obj.insert("key".into(), delta.key.clone().into());
+                        obj.insert(
+                            "oldValue".into(),
+                            to_dynamic(delta.old_value.to_string()).unwrap(),
+                        );
+                        obj.insert("newValue".into(), Dynamic::from_map(new_value));
+                        Dynamic::from_map(obj)
+                    })
+                    .collect::<Vec<Dynamic>>();
+                Dynamic::from_array(deltas)
+            });
+    }
+}
+
 impl TypeRegister for DeltaProto<JsonValue> {
     fn register_types(engine: &mut Engine) {
         engine.register_type::<Self>();
@@ -274,6 +308,27 @@ impl TypeRegister for Rc<StoreGetProto<JsonValue>> {
     }
 }
 
+impl TypeRegister for Rc<StoreGetBigInt> {
+    fn register_types(engine: &mut Engine) {
+        engine
+            .register_type_with_name::<Self>("StoreGet")
+            .register_fn("get", |store: &mut Self, key: String| {
+                if let Some(value) = store.get_last(&key) {
+                    value
+                } else {
+                    Default::default()
+                }
+            })
+            .register_fn("get_first", |store: &mut Self, key: String| {
+                if let Some(value) = store.get_first(&key) {
+                    value
+                } else {
+                    Default::default()
+                }
+            });
+    }
+}
+
 impl TypeRegister for Rc<StoreAddBigInt> {
     fn register_types(engine: &mut Engine) {
         let add_fn = |store: &mut Self, key: String, value: Dynamic| {
@@ -311,8 +366,10 @@ pub fn register_builtins(engine: &mut Engine) {
     <BigInt>::register_types(engine);
     <JsonValue>::register_types(engine);
     <Deltas<DeltaProto<JsonValue>>>::register_types(engine);
+    <Deltas<DeltaBigInt>>::register_types(engine);
     <Rc<StoreSetProto<JsonValue>>>::register_types(engine);
     <Rc<StoreSetIfNotExistsProto<JsonValue>>>::register_types(engine);
     <Rc<StoreGetProto<JsonValue>>>::register_types(engine);
+    <Rc<StoreGetBigInt>>::register_types(engine);
     <Rc<StoreAddBigInt>>::register_types(engine);
 }
