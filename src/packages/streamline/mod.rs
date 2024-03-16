@@ -41,6 +41,8 @@ fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     blocks::init_globals(engine, scope);
     graph_out::init_globals(engine, scope);
 
+    engine.register_type::<prost_wkt_types::Value>();
+
     engine.on_print(|s| {
         if cfg!(feature = "substreams_runtime") {
             substreams::log::println(&s);

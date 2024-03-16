@@ -96,7 +96,19 @@ pub mod rust {
             String::new()
         };
 
-        let arg_names = inputs.iter().map(|input| input.name()).collect::<Vec<_>>();
+        let arg_names = inputs
+            .iter()
+            .map(|input| {
+                let name = input.name();
+                match &input {
+                    ModuleInput::Map { .. } => {
+                        format!("to_dynamic(serde_json::to_value({name}).unwrap()).unwrap()")
+                    }
+                    ModuleInput::Store { .. } => name,
+                    ModuleInput::Source { .. } => name,
+                }
+            })
+            .collect::<Vec<_>>();
 
         let args = if arg_names.len() == 1 {
             format!("{},", arg_names[0])

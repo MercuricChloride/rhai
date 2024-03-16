@@ -10,6 +10,7 @@ use std::rc::Rc;
 use super::codegen;
 
 const JSON_VALUE_PROTO: &str = "proto:google.protobuf.Value";
+const BIGINT_PROTO: &str = "bigint";
 
 enum AccessMode {
     Get,
@@ -107,7 +108,7 @@ impl Default for ModuleOutput {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum UpdatePolicy {
     Set,
@@ -144,6 +145,10 @@ impl ModuleData {
     }
 
     pub fn new_sfn(name: String, inputs: Vec<ModuleInput>, update_policy: UpdatePolicy) -> Self {
+        let value_type = match &update_policy {
+            UpdatePolicy::Add => Some(BIGINT_PROTO.to_string()),
+            _ => Some(JSON_VALUE_PROTO.to_string()),
+        };
         Self {
             rhai_handler: name.clone(),
             name,
@@ -151,7 +156,7 @@ impl ModuleData {
             inputs,
             output: None,
             update_policy: Some(update_policy),
-            value_type: Some(JSON_VALUE_PROTO.to_string()),
+            value_type,
         }
     }
 
@@ -190,6 +195,10 @@ impl ModuleData {
             }
         }
         None
+    }
+
+    pub fn update_policy(&self) -> Option<UpdatePolicy> {
+        self.update_policy
     }
 
     pub fn handler(&self) -> &str {
