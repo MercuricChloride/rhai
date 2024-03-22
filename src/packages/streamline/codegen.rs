@@ -1,8 +1,10 @@
-use super::abi::ContractImports;
 use super::modules::ModuleData;
 
 pub mod rust {
-    use crate::packages::streamline::modules::{ModuleInput, ModuleKind};
+    use crate::packages::streamline::{
+        modules::{ModuleInput, ModuleKind},
+        sink::{GlobalSinkConfig, SinkConfig},
+    };
 
     use super::*;
 
@@ -79,10 +81,19 @@ pub mod rust {
         }
     }
 
-    pub fn generate_streamline_modules(modules: &Vec<&ModuleData>) -> String {
+    pub fn generate_streamline_modules(
+        modules: &Vec<&ModuleData>,
+        sink_config: &GlobalSinkConfig,
+    ) -> String {
         modules.iter().fold(String::new(), |acc, e| {
             let module_code = match e.kind() {
-                ModuleKind::Map => generate_mfn(e.name(), e.inputs(), e.handler()),
+                ModuleKind::Map => {
+                    if let Some(config) = sink_config.borrow().sinks.get(e.name()) {
+                        generate_sink(e.name(), e.inputs(), e.handler(), config)
+                    } else {
+                        generate_mfn(e.name(), e.inputs(), e.handler())
+                    }
+                }
                 ModuleKind::Store => {
                     let store_kind = e
                         .store_kind()
@@ -95,8 +106,72 @@ pub mod rust {
         })
     }
 
+    /// This function matches against the name of the map module
+    /// and uses the appropriate conversion function for the type of sink it is
+    fn get_output_type(name: &str) -> &'static str {
+        match name {
+            "graph_out" => "Any",
+            _ => "JsonValue",
+        }
+    }
+
+    fn generate_sink(
+        name: &str,
+        inputs: &Vec<ModuleInput>,
+        handler: &str,
+        config: &SinkConfig,
+    ) -> String {
+        let SinkConfig { crate_name, .. } = config;
+
+        let output_type = get_output_type(name);
+        let module_inputs = inputs.generate();
+        let formatters = if let Some(val) = inputs.generate_formatters() {
+            val
+        } else {
+            String::new()
+        };
+        let arg_names = inputs
+            .iter()
+            .map(|input| {
+                let name = input.name();
+                match &input {
+                    ModuleInput::Map { .. } => {
+                        format!("to_dynamic(serde_json::to_value({name}).unwrap()).unwrap()")
+                    }
+                    _ => name,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let args = if arg_names.len() == 1 {
+            format!("{},", arg_names[0])
+        } else {
+            arg_names.join(",")
+        };
+
+        format!(
+            r#"
+#[substreams::handlers::map]
+fn {name}({module_inputs}) -> Option<{output_type}> {{
+    {formatters}
+    let (mut engine, mut scope) = engine_init!();
+    let ast = engine.compile(RHAI_SCRIPT).unwrap();
+    let result: Dynamic = engine.call_fn(&mut scope, &ast, "{handler}", ({args})).expect("Call failed");
+    if result.is_unit() {{
+        None
+    }} else {{
+        let result = serde_json::to_value(&result).expect("Couldn't convert from Dynamic!");
+        let conversion = {crate_name}::convert(result).expect("Failed to convert output_map to sink type!");
+        Any::from_msg(conversion).ok()
+    }}
+}}
+    "#
+        )
+    }
+
     fn generate_mfn(name: &str, inputs: &Vec<ModuleInput>, handler: &str) -> String {
         // The rust fn inputs
+        let output_type = get_output_type(name);
         let module_inputs = inputs.generate();
         let formatters = if let Some(val) = inputs.generate_formatters() {
             val
@@ -127,7 +202,7 @@ pub mod rust {
         format!(
             r#"
 #[substreams::handlers::map]
-fn {name}({module_inputs}) -> Option<JsonValue> {{
+fn {name}({module_inputs}) -> Option<{output_type}> {{
     {formatters}
     let (mut engine, mut scope) = engine_init!();
     let ast = engine.compile(RHAI_SCRIPT).unwrap();
@@ -186,7 +261,10 @@ fn {name}({module_inputs}, streamline_store_param: {store_kind}) {{
 }
 
 pub mod yaml {
-    use crate::packages::streamline::modules::{ModuleDag, ModuleKind};
+    use crate::packages::streamline::{
+        modules::{ModuleDag, ModuleKind},
+        sink::GlobalSinkConfig,
+    };
 
     const TEMPLATE_YAML: &'static str = "
 specVersion: v0.1.0
@@ -197,6 +275,7 @@ package:
 imports:
   sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.2/substreams-sink-sql-protodefs-v1.0.2.spkg
   database_change: https://github.com/streamingfast/substreams-sink-database-changes/releases/download/v1.2.1/substreams-database-change-v1.2.1.spkg
+  entity: https://github.com/streamingfast/substreams-entity-change/releases/download/v0.2.1/substreams-entity-change-v0.2.1.spkg
 
 protobuf:
   files:
@@ -215,12 +294,20 @@ modules:
 $$MODULES$$
 ";
 
-    pub fn generate_yaml(modules: &ModuleDag) -> String {
+    pub fn generate_yaml(modules: &ModuleDag, sink_config: &GlobalSinkConfig) -> String {
+        // we are cloning here because this only runs at compile time, so it's fine
+        let mut modules = modules.modules.clone();
         let modules = modules
-            .modules
-            .iter()
+            .iter_mut()
             .filter_map(|(_, module)| match module.kind() {
-                ModuleKind::Map => Some(module),
+                ModuleKind::Map => {
+                    if let Some(config) = sink_config.borrow().sinks.get(module.name()) {
+                        module.set_output(&config.protobuf_name);
+                        Some(module)
+                    } else {
+                        Some(module)
+                    }
+                }
                 ModuleKind::Store => Some(module),
                 ModuleKind::Source => None,
             })

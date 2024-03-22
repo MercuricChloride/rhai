@@ -54,8 +54,8 @@ fn main() {
         // Initialize scripting engine
         #[allow(unused_mut)]
         let mut engine = Engine::new_raw();
-        let mut scope = Scope::new();
-        let (mut engine, mut scope) = streamline::init_package(engine, scope);
+        let scope = Scope::new();
+        let (mut engine, _scope) = streamline::init_package(engine, scope);
 
         #[cfg(not(feature = "no_optimize"))]
         engine.set_optimization_level(rhai::OptimizationLevel::Simple);
@@ -106,6 +106,7 @@ fn main() {
             eprintln!();
 
             eprint_error(contents, *err);
+            exit(1);
         }
     }
 }

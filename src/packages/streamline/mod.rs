@@ -12,6 +12,7 @@ mod codegen;
 mod graph_out;
 /// A plugin to handle the dag of substreams modules
 mod modules;
+mod sink;
 
 def_package! {
     /// Streamline package for the substreams module
