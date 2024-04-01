@@ -170,9 +170,9 @@ impl TypeRegister for Vec<u8> {
         // register the address type
         engine
             .register_type_with_name::<Vec<u8>>("Address")
-            .register_fn("address", |x: Vec<u8>| {
-                if x.len() == 20 {
-                    Dynamic::from(format!("0x{}", Hex(x).to_string()))
+            .register_fn("address", |x: String| {
+                if x.len() == 42 {
+                    Dynamic::from(Hex(x).to_string())
                 } else {
                     Dynamic::from(())
                 }

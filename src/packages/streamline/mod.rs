@@ -1,3 +1,4 @@
+#![allow(warnings)]
 use self::builtins::register_builtins;
 
 use super::{Package, StandardPackage};
@@ -9,7 +10,13 @@ mod blocks;
 /// Adds Substreams types to the Rhai Runtime
 pub mod builtins;
 mod codegen;
-mod graph_out;
+/// Constants used in streamline
+pub mod constants;
+/// A plugin that adds support for the graph_out sink. Eventually this will live in it's own repo
+pub mod graph_out;
+/// A plugin system for changing how certain map modules are written
+pub mod module_resolver;
+mod module_types;
 /// A plugin to handle the dag of substreams modules
 mod modules;
 mod sink;

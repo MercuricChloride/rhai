@@ -1,8 +1,89 @@
-use super::modules::ModuleData;
+use crate::packages::streamline::modules::{Accessor, Kind};
+use crate::ImmutableString;
+
+use super::modules::{Input, Module};
+use super::sink::{ModuleResolver, ResolvedModule, DefaultModuleResolver};
+
+macro_rules! multi_let {
+    ($($ident:ident),+) => {
+        $(let $ident;)+
+    };
+}
+
+pub trait Codegen<T> {
+    fn generate(&self, resolver: Box<dyn ModuleResolver>) -> String;
+}
+
+pub struct RustGenerator;
+
+impl Codegen<RustGenerator> for Module {
+    fn generate(&self, resolver: Box<dyn ModuleResolver>) -> String {
+        let attribute;
+        let mut output_type;
+
+        if let Kind::Map = &self.kind {
+            attribute = "#[substreams::handlers::map]".to_string();
+            output_type = "-> Option<JsonValue>".to_string();
+        } else {
+            attribute = "#[substreams::handlers::store]".to_string();
+            output_type = "".to_string();
+        }
+
+        let Module { name, inputs: m_inputs , kind: m_kind } = &self;
+
+        let inputs = m_inputs.iter().map(|e| e.generate(resolver)).collect::<Vec<_>>().join(",");
+
+        if let Some(ResolvedModule::Sink(config)) = resolver.get(name.clone()) {
+            // Sink stuff
+            todo!()
+        } else {
+            todo!()
+            // normal
+        }
+
+        format!(r#"\
+{{attribute}}
+fn {name}({inputs}) {output_type} {{
+    {formatters}
+    let (mut engine, mut scope) = engine_init!();
+    let ast = engine.compile(RHAI_SCRIPT).unwrap();
+    let result: Dynamic = engine.call_fn(&mut scope, &ast, "{handler}", ({args})).expect("Call failed");
+    if result.is_unit() {{
+        None
+    }} else {{
+        let conversion = {fully_qualified_path}(result);
+        Some(conversion)
+    }}
+}}
+            "#)
+    }
+}
+
+impl Codegen<RustGenerator> for Input {
+    fn generate(&self, resolver: Box<dyn ModuleResolver>) -> String {
+        let Input { name, access } = &self;
+        let input_type = match access {
+            Accessor::Deltas => "deltas"
+            Accessor::Get => todo!(),
+            Accessor::Store(_) => todo!(),
+            Accessor::Default => todo!(),
+        };
+        format!("")
+    }
+}
+
+pub struct RustModuleTemplate {
+    name: ImmutableString,
+    inputs: Vec<Input>,
+}
+
+pub fn generate_rust_module(name: ImmutableString, inputs: Vec<Input>) -> String {
+    todo!()
+}
 
 pub mod rust {
     use crate::packages::streamline::{
-        modules::{ModuleInput, ModuleKind},
+        modules::{Kind, ModuleInput},
         sink::{GlobalSinkConfig, SinkConfig},
     };
 
@@ -87,14 +168,14 @@ pub mod rust {
     ) -> String {
         modules.iter().fold(String::new(), |acc, e| {
             let module_code = match e.kind() {
-                ModuleKind::Map => {
+                Kind::Map => {
                     if let Some(config) = sink_config.borrow().sinks.get(e.name()) {
                         generate_sink(e.name(), e.inputs(), e.handler(), config)
                     } else {
                         generate_mfn(e.name(), e.inputs(), e.handler())
                     }
                 }
-                ModuleKind::Store => {
+                Kind::Store => {
                     let store_kind = e
                         .store_kind()
                         .expect("Tried to get store_kind for a module that wasn't set / setOnce");
@@ -110,7 +191,7 @@ pub mod rust {
     /// and uses the appropriate conversion function for the type of sink it is
     fn get_output_type(name: &str) -> &'static str {
         match name {
-            "graph_out" => "Any",
+            "graph_out" => "EntityChanges",
             _ => "JsonValue",
         }
     }
@@ -121,7 +202,11 @@ pub mod rust {
         handler: &str,
         config: &SinkConfig,
     ) -> String {
-        let SinkConfig { crate_name, .. } = config;
+        let SinkConfig {
+            crate_name,
+            fully_qualified_path,
+            ..
+        } = config;
 
         let output_type = get_output_type(name);
         let module_inputs = inputs.generate();
@@ -160,9 +245,8 @@ fn {name}({module_inputs}) -> Option<{output_type}> {{
     if result.is_unit() {{
         None
     }} else {{
-        let result = serde_json::to_value(&result).expect("Couldn't convert from Dynamic!");
-        let conversion = {crate_name}::convert(result).expect("Failed to convert output_map to sink type!");
-        Any::from_msg(conversion).ok()
+        let conversion = {fully_qualified_path}(result);
+        Some(conversion)
     }}
 }}
     "#
@@ -262,7 +346,7 @@ fn {name}({module_inputs}, streamline_store_param: {store_kind}) {{
 
 pub mod yaml {
     use crate::packages::streamline::{
-        modules::{ModuleDag, ModuleKind},
+        modules::{Kind, ModuleDag},
         sink::GlobalSinkConfig,
     };
 
@@ -300,7 +384,7 @@ $$MODULES$$
         let modules = modules
             .iter_mut()
             .filter_map(|(_, module)| match module.kind() {
-                ModuleKind::Map => {
+                Kind::Map => {
                     if let Some(config) = sink_config.borrow().sinks.get(module.name()) {
                         module.set_output(&config.protobuf_name);
                         Some(module)
@@ -308,8 +392,8 @@ $$MODULES$$
                         Some(module)
                     }
                 }
-                ModuleKind::Store => Some(module),
-                ModuleKind::Source => None,
+                Kind::Store => Some(module),
+                Kind::Source => None,
             })
             .collect::<Vec<_>>();
 

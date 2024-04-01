@@ -1,8 +1,10 @@
+use crate::serde::from_dynamic;
 use crate::{plugin::*, Array, Map as Obj, Scope};
 use core::convert::{TryFrom, TryInto};
 use core::str::FromStr;
 use num_traits::ToPrimitive;
 use substreams::scalar::BigInt;
+use substreams::Hex;
 use substreams_entity_change::change::ToField;
 use substreams_entity_change::pb::entity::value::Typed;
 
@@ -18,7 +20,7 @@ macro_rules! set {
 }
 
 #[export_module]
-pub mod graph_out {
+mod graph_out {
     use substreams_entity_change::pb::entity::entity_change::Operation;
 
     pub type SubgraphFieldChange = Field;
@@ -75,6 +77,14 @@ macro_rules! as_value {
     };
 }
 
+macro_rules! field_value {
+    ($variant: ident, $value: expr) => {
+        Ok(Value {
+            typed: Some(Typed::$variant($value)),
+        })
+    };
+}
+
 impl TryInto<Value> for Dynamic {
     type Error = &'static str;
 
@@ -85,14 +95,20 @@ impl TryInto<Value> for Dynamic {
 
         if let (Some(variant), Some(value)) = (variant, value) {
             let variant: String = variant.cast();
-            todo!();
+            match variant.as_str() {
+                s if s.starts_with("BigInt") => field_value!(Bigint, value.cast()),
+                s if s.starts_with("Address") => {
+                    field_value!(String, value.into_string().unwrap())
+                }
+                _ => todo!(),
+            }
         } else {
             Err("Couldn't convert value into FieldValue")
         }
     }
 }
 
-pub fn as_field(mut change: Obj) -> Option<Field> {
+fn as_field(mut change: Obj) -> Option<Field> {
     let name: String = change.remove("name")?.try_cast()?;
     let new_value = change.remove("new_value")?.try_into().ok();
 
@@ -104,34 +120,52 @@ pub fn as_field(mut change: Obj) -> Option<Field> {
     })
 }
 
-pub fn as_entity_change(mut change: Obj) -> Option<EntityChange> {
-    let entity: String = change.remove("entity_name")?.try_cast()?;
-    let id: String = change.remove("entity_id")?.try_cast()?;
-    let operation: i32 = change.remove("operation")?.try_cast()?;
+fn as_entity_change(mut change: Obj) -> Option<EntityChange> {
+    let entity: String = change.remove("entity")?.try_cast()?;
+    let id: String = change.remove("id")?.try_cast()?;
+    let operation: i64 = change.remove("operation")?.cast();
     let fields: Vec<Field> = change
         .remove("fields")?
-        .try_cast::<Vec<Obj>>()?
+        .cast::<Array>()
         .into_iter()
-        .filter_map(as_field)
+        .filter_map(|item| item.try_cast())
+        .filter_map(|mut item| as_field(item))
         .collect();
 
     Some(EntityChange {
         entity: entity.to_string(),
         id: id.to_string(),
         ordinal: 0, // Not used in graph node
-        operation,
+        operation: operation as i32,
         fields,
     })
 }
 
+/// Converts an Array of objects, into the EntityChanges protobuf
 pub fn as_entity_changes(mut changes: Dynamic) -> EntityChanges {
-    let changes: Vec<Obj> = changes.cast::<Vec<Obj>>();
+    if changes.is_array() {
+        let changes: Array = changes
+            .try_cast::<Array>()
+            .expect("Couldn't convert into Array!");
 
-    let entity_changes = changes.into_iter().filter_map(as_entity_change).collect();
+        let entity_changes = changes
+            .into_iter()
+            .map(|item| item.cast::<Obj>())
+            .filter_map(as_entity_change)
+            .collect();
 
-    EntityChanges { entity_changes }
+        EntityChanges { entity_changes }
+    } else {
+        substreams::log::println(format!(
+            "graph_out output wasn't found to be an array! {changes:?}"
+        ));
+        EntityChanges {
+            entity_changes: vec![],
+        }
+    }
 }
 
+/// Initializes the subgraph_helpers global module for the rhai runtime
 pub fn init_globals(engine: &mut Engine, _scope: &mut Scope) {
     let module = exported_module!(graph_out);
     engine.register_static_module("subgraph_helpers", module.into());
