@@ -8,10 +8,12 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::rc::Rc;
 
-use super::codegen;
+use super::codegen::rust::RustGenerator;
+use super::codegen::{self, Codegen};
 use super::constants::INITIAL_BLOCK;
 use super::module_types::ModuleData;
-use super::sink::{GlobalSinkConfig, SinkConfigMap};
+use super::sink::{DefaultModuleResolver, ModuleResolver};
+//use super::sink::{GlobalSinkConfig, SinkConfigMap};
 
 //converts an iterator of type T, into another type via the conversion
 macro_rules! map_cast {
@@ -101,54 +103,10 @@ impl FromStr for Input {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct ModuleDag {
-    pub modules: BTreeMap<ImmutableString, Module>,
-}
-
-impl ModuleDag {
-    pub fn new() -> Self {
-        let mut module_map = BTreeMap::new();
-
-        Self {
-            modules: module_map,
-        }
-    }
-
-    pub fn new_shared() -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self::new()))
-    }
-
-    pub fn add_mfn(&mut self, name: ImmutableString, inputs: Vec<ImmutableString>) {
-        self.modules
-            .insert(name.clone(), Module::new(name, &inputs, Kind::Map));
-    }
-
-    pub fn add_sfn(&mut self, name: ImmutableString, inputs: Vec<ImmutableString>) {
-        self.modules
-            .insert(name.clone(), Module::new(name, &inputs, Kind::Store));
-    }
-
-    pub fn add_sink(&mut self, kind: &str, inputs: Array) {}
-
-    pub fn get_module(&self, name: &str) -> Option<&Module> {
-        self.modules.get(name)
-    }
-
-    pub fn generate_streamline_modules(&self, sink_config: &GlobalSinkConfig) -> String {
-        let modules = self.modules.values().collect::<Vec<_>>();
-        codegen::rust::generate_streamline_modules(&modules, sink_config)
-    }
-}
-
-pub type GlobalModuleDag = Rc<RefCell<ModuleDag>>;
-
 pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
-    let module_dag = ModuleDag::new_shared();
-    let sink_config_map = SinkConfigMap::new_shared();
+    let resolver = DefaultModuleResolver::new_shared();
 
-    let modules = module_dag.clone();
-    // TODO - change this to accept in an array of strings, which we will look up to resolve input types
+    let modules = resolver.clone();
     engine.register_fn(
         "add_mfn",
         move |name: ImmutableString, inputs: Vec<ImmutableString>| {
@@ -157,7 +115,7 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
         },
     );
 
-    let modules = module_dag.clone();
+    let modules = resolver.clone();
     engine.register_fn(
         "add_sfn",
         move |name: ImmutableString, inputs: Vec<ImmutableString>| {
@@ -166,23 +124,25 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
         },
     );
 
-    let modules = module_dag.clone();
-    let sink_config = sink_config_map.clone();
+    let modules = resolver.clone();
     engine.register_fn("generate_yaml", move |path: String| {
         let modules = (*modules).borrow();
 
-        let yaml = codegen::yaml::generate_yaml(&modules, &sink_config);
-        fs::write(&path, &yaml).unwrap();
-        format!("Wrote yaml to {} successfully!", &path)
+        todo!("Need to generate yaml");
+        //let yaml = codegen::yaml::generate_yaml(&modules, &sink_config);
+        //fs::write(&path, &yaml).unwrap();
+        //format!("Wrote yaml to {} successfully!", &path)
     });
 
-    let modules = module_dag.clone();
-    let sink_config = sink_config_map.clone();
+    let modules = resolver.clone();
     engine.register_fn("generate_rust", move |path: String| {
-        let modules_source = (*modules)
-            .borrow()
-            .generate_streamline_modules(&sink_config);
-        fs::write(&path, &modules_source).unwrap();
+        // we only call generate_rust once, so this is fine
+        // we are just cloning all the module data underneath to use in the generation
+        // and it should be the valid module data, since the variable we capture in the closure is a Rc<RefCell>
+        // which points to the original module data
+        let modules = (*modules).clone().borrow().clone();
+        let generator = RustGenerator::new(Box::new(modules) as Box<dyn ModuleResolver>);
+        fs::write(&path, generator.generate()).unwrap();
         format!("Wrote rust source to {} successfully!", &path)
     });
 

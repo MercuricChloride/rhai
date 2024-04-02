@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::ImmutableString;
 
-use super::modules::Module;
+use super::modules::{Kind, Module};
 
 macro_rules! impl_from {
     ($variant:ident) => {
@@ -25,8 +25,30 @@ pub trait ModuleResolver {
 
     /// Returns either a ResolvedModuleConfig if the module should have it's generated code changed
     fn get(&self, module_name: ImmutableString) -> Option<&ResolvedModule>;
+
+    /// Returns a list of the modules a user has defined and included
+    /// Note that this returns a Vec<Module> not resolved module.
+    /// This is because the user cannot define a source block, or a sink config variant of resolved module.
+    fn get_user_modules(&self) -> Vec<&Module>;
+
+    /// A function to add a mfn, this is for compatability with the older API
+    fn add_mfn(&mut self, name: ImmutableString, inputs: Vec<ImmutableString>) {
+        self.set_module(
+            name.clone(),
+            ResolvedModule::Module(Module::new(name, &inputs, Kind::Map)),
+        );
+    }
+
+    /// A function to add a sfn, this is for compatability with the older API
+    fn add_sfn(&mut self, name: ImmutableString, inputs: Vec<ImmutableString>) {
+        self.set_module(
+            name.clone(),
+            ResolvedModule::Module(Module::new(name, &inputs, Kind::Store)),
+        );
+    }
 }
 
+#[derive(Clone)]
 pub enum ResolvedModule {
     Module(Module),
     SinkConfig(SinkConfig),
@@ -37,6 +59,7 @@ impl_from!(Module);
 impl_from!(SinkConfig);
 impl_from!(Source);
 
+#[derive(Clone)]
 pub struct Source {
     pub protobuf_name: ImmutableString,
     pub rust_name: ImmutableString,
@@ -72,6 +95,7 @@ impl SinkConfig {
     }
 }
 
+#[derive(Clone)]
 pub struct DefaultModuleResolver {
     modules: HashMap<ImmutableString, ResolvedModule>,
 }
@@ -83,6 +107,10 @@ impl DefaultModuleResolver {
         modules.insert("BLOCK".into(), Source::eth_block().into());
 
         Self { modules }
+    }
+
+    pub fn new_shared() -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self::new()))
     }
 }
 
@@ -106,5 +134,15 @@ impl ModuleResolver for DefaultModuleResolver {
 
     fn get(&self, module_name: ImmutableString) -> Option<&ResolvedModule> {
         self.modules.get(&module_name)
+    }
+
+    fn get_user_modules(&self) -> Vec<&Module> {
+        self.modules
+            .values()
+            .filter_map(|e| match e {
+                ResolvedModule::Module(module) => Some(module),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
     }
 }
