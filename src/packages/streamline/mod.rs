@@ -9,7 +9,7 @@ mod abi;
 mod blocks;
 /// Adds Substreams types to the Rhai Runtime
 pub mod builtins;
-mod codegen;
+pub mod codegen;
 /// Constants used in streamline
 pub mod constants;
 /// A plugin that adds support for the graph_out sink. Eventually this will live in it's own repo

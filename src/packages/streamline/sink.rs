@@ -39,14 +39,14 @@ impl_from!(Source);
 
 pub struct Source {
     pub protobuf_name: ImmutableString,
-    pub rust_type_name: ImmutableString,
+    pub rust_name: ImmutableString,
 }
 
 impl Source {
     pub fn eth_block() -> Self {
         Self {
             protobuf_name: "sf.ethereum.type.v2.Block".into(),
-            rust_type_name: "EthBlock".into(),
+            rust_name: "EthBlock".into(),
         }
     }
 }
@@ -54,6 +54,7 @@ impl Source {
 #[derive(Clone)]
 pub struct SinkConfig {
     pub protobuf_name: String,
+    pub rust_name: String,
     pub crate_name: String,
     pub fully_qualified_path: String,
     pub spkg_link: String,
@@ -63,6 +64,7 @@ impl SinkConfig {
     pub fn graph_out() -> Self {
         Self {
             protobuf_name: "substreams.entity.v1.EntityChanges".into(),
+            rust_name: "substreams_entity_change::pb::entity::EntityChanges".into(),
             crate_name: "streamline_subgraph_conversions".into(),
             fully_qualified_path: "rhai::packages::streamline::graph_out::as_entity_changes".into(),
             spkg_link: "HARDCODED_FOR_NOW".into(),

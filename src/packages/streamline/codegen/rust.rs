@@ -1,8 +1,14 @@
-use crate::packages::streamline::modules::{Accessor, Kind};
+use super::Codegen;
+use crate::packages::streamline;
+use crate::packages::streamline::constants::{
+    MFN_ATTRIBUTE, MFN_DEFAULT_CONVERSION, MFN_OUTPUT, MFN_OUTPUT_TYPE, SFN_ATTRIBUTE,
+    SFN_BIGINT_DELTAS, SFN_BIGINT_GET, SFN_JSON_DELTAS, SFN_JSON_GET,
+};
+use crate::packages::streamline::modules::{Input, Kind, UpdatePolicy};
 use crate::ImmutableString;
-
-use super::modules::{Input, Module};
-use super::sink::{ModuleResolver, ResolvedModule, DefaultModuleResolver};
+use std::rc::Rc;
+use streamline::modules as m; //::{Accessor, Kind, Input as SInput, Module as SModule};
+use streamline::sink::{DefaultModuleResolver, ModuleResolver, ResolvedModule};
 
 macro_rules! multi_let {
     ($($ident:ident),+) => {
@@ -10,67 +16,245 @@ macro_rules! multi_let {
     };
 }
 
-pub trait Codegen<T> {
-    fn generate(&self, resolver: Box<dyn ModuleResolver>) -> String;
+pub struct RustGenerator {
+    functions: Vec<RustHandler>,
 }
 
-pub struct RustGenerator;
+impl RustGenerator {
+    pub fn new(modules: Vec<ImmutableString>, resolver: Box<dyn ModuleResolver>) -> Self {
+        let modules = modules
+            .into_iter()
+            .filter_map(|e| resolver.get(e))
+            .collect::<Vec<_>>();
+    }
+}
 
-impl Codegen<RustGenerator> for Module {
-    fn generate(&self, resolver: Box<dyn ModuleResolver>) -> String {
-        let attribute;
-        let mut output_type;
+/// Contains all the data to generate a single rust fn for a module
+struct RustHandler {
+    name: ImmutableString,
+    inputs: Vec<Box<dyn Codegen>>,
+    conversion: ImmutableString,
+    output_type: ImmutableString,
+    attribute: ImmutableString,
+}
 
-        if let Kind::Map = &self.kind {
-            attribute = "#[substreams::handlers::map]".to_string();
-            output_type = "-> Option<JsonValue>".to_string();
-        } else {
-            attribute = "#[substreams::handlers::store]".to_string();
-            output_type = "".to_string();
+/// This represents a single function input in the rust handler
+struct RustInput {
+    name: ImmutableString,
+    value_type: ImmutableString,
+}
+
+impl RustInput {
+    pub fn new(input: &Input, resolver: Box<dyn ModuleResolver>) -> Self {
+        let Input { name, access } = &input;
+
+        let resolved = resolver
+            .get(name.into())
+            .expect(&format!("No module found for: {}", &name));
+
+        match resolved {
+            ResolvedModule::Module(module) => {
+                if let Kind::Map = module.kind {
+                    RustInput {
+                        name: name.into(),
+                        value_type: MFN_OUTPUT_TYPE.into(),
+                    }
+                } else {
+                    let update_policy = module
+                        .update_policy()
+                        .expect("Store value didn't have an update policy!");
+
+                    let value_type = match update_policy {
+                        UpdatePolicy::Add => match access {
+                            m::Accessor::Deltas => SFN_BIGINT_DELTAS,
+                            m::Accessor::Get | m::Accessor::Default => SFN_BIGINT_GET,
+                            m::Accessor::Store(_) => unreachable!(),
+                        },
+                        _ => match access {
+                            m::Accessor::Deltas => SFN_JSON_DELTAS,
+                            m::Accessor::Get | m::Accessor::Default => SFN_JSON_GET,
+                            m::Accessor::Store(_) => unreachable!(),
+                        },
+                    };
+
+                    RustInput {
+                        name: name.into(),
+                        value_type: value_type.into(),
+                    }
+                }
+            }
+            ResolvedModule::SinkConfig(sink) => RustInput {
+                name: name.into(),
+                value_type: sink.rust_name.as_str().into(),
+            },
+            ResolvedModule::Source(source) => RustInput {
+                name: name.into(),
+                value_type: source.rust_name.as_str().into(),
+            },
+        }
+    }
+}
+
+impl RustHandler {
+    pub fn new(
+        name: ImmutableString,
+        resolver: Box<dyn ModuleResolver>,
+        inputs: Vec<Box<dyn Codegen>>,
+    ) -> Self {
+        let module = resolver
+            .get(name.clone())
+            .expect(&format!("No module found for: {}", &name));
+
+        match module {
+            ResolvedModule::Module(module) => {
+                if let Kind::Map = module.kind {
+                    RustHandler {
+                        name,
+                        inputs,
+                        conversion: MFN_DEFAULT_CONVERSION.into(),
+                        output_type: MFN_OUTPUT.into(),
+                        attribute: MFN_ATTRIBUTE.into(),
+                    }
+                } else {
+                    RustHandler {
+                        name,
+                        inputs,
+                        conversion: "".into(),
+                        output_type: "".into(),
+                        attribute: SFN_ATTRIBUTE.into(),
+                    }
+                }
+            }
+            ResolvedModule::SinkConfig(sink) => RustHandler {
+                name,
+                inputs,
+                conversion: sink.fully_qualified_path.as_str().into(),
+                output_type: sink.rust_name.as_str().into(),
+                attribute: MFN_ATTRIBUTE.into(),
+            },
+            ResolvedModule::Source(_) => unreachable!(),
+        }
+    }
+}
+
+impl Codegen for RustHandler {
+    fn generate(&self) -> String {
+        let Self {
+            name,
+            inputs,
+            conversion,
+            output_type,
+            attribute,
+        } = &self;
+        // Store modules don't do anything with the result of the function call, so we set the 'body' to be an empty string
+        // Otherwise we have to apply some conversions to them
+        let mut body: String = "".into();
+
+        let inputs = inputs.iter().map(|e| e.generate()).collect::<Vec<_>>();
+        // We need to track if there is a single input to the module, so we can add the extra comma to the end of the tuple in the rust code
+        // (foo) evaluates to foo
+        // (foo,) is a single len tuple containing foo
+        let single_input = inputs.len() == 1;
+
+        let fn_inputs = &inputs.join(",");
+        let mut handler_inputs = inputs
+            .clone()
+            .iter()
+            .map(|input| {
+                // inputs are of the form
+                // name: Type
+                // and we only need the name
+                input.split(":").collect::<Vec<_>>()[0]
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+
+        if single_input {
+            handler_inputs.push_str(",");
         }
 
-        let Module { name, inputs: m_inputs , kind: m_kind } = &self;
-
-        let inputs = m_inputs.iter().map(|e| e.generate(resolver)).collect::<Vec<_>>().join(",");
-
-        if let Some(ResolvedModule::Sink(config)) = resolver.get(name.clone()) {
-            // Sink stuff
-            todo!()
-        } else {
-            todo!()
-            // normal
+        // if the output_type isn't empty, it means its a map module, so we need to do something with the result
+        // of the function call
+        if !output_type.is_empty() {
+            body = format!(
+                r#"
+if result.is_unit() {{
+    None
+}} else {{
+    let result = {conversion};
+    Some(result)
+}}
+"#
+            );
         }
 
-        format!(r#"\
-{{attribute}}
-fn {name}({inputs}) {output_type} {{
-    {formatters}
+        format!(
+            r#"
+{attribute}
+fn {name}({fn_inputs}) {output_type} {{
     let (mut engine, mut scope) = engine_init!();
     let ast = engine.compile(RHAI_SCRIPT).unwrap();
-    let result: Dynamic = engine.call_fn(&mut scope, &ast, "{handler}", ({args})).expect("Call failed");
-    if result.is_unit() {{
-        None
-    }} else {{
-        let conversion = {fully_qualified_path}(result);
-        Some(conversion)
-    }}
+    let result: Dynamic = engine.call_fn(&mut scope, &ast, "{name}", ({handler_inputs})).expect("Call failed");
+    {body}
 }}
-            "#)
+"#,
+        )
     }
 }
 
-impl Codegen<RustGenerator> for Input {
-    fn generate(&self, resolver: Box<dyn ModuleResolver>) -> String {
-        let Input { name, access } = &self;
-        let input_type = match access {
-            Accessor::Deltas => "deltas"
-            Accessor::Get => todo!(),
-            Accessor::Store(_) => todo!(),
-            Accessor::Default => todo!(),
-        };
-        format!("")
+impl Codegen for RustGenerator {
+    fn generate(&self) -> String {
+        let Self { functions } = &self;
+        functions
+            .iter()
+            .map(Codegen::generate)
+            .collect::<Vec<_>>()
+            .join("")
     }
 }
+
+// impl Codegen for RustGenerator {
+//     fn generate(&self) -> String {
+//         let attribute;
+//         let mut output_type;
+
+//         if let Kind::Map = &self.kind {
+//             attribute = "#[substreams::handlers::map]".to_string();
+//             output_type = "-> Option<JsonValue>".to_string();
+//         } else {
+//             attribute = "#[substreams::handlers::store]".to_string();
+//             output_type = "".to_string();
+//         }
+
+//         let Module { name, inputs: m_inputs , kind: m_kind } = &self;
+
+//         let inputs = m_inputs.iter().map(|e| e.generate(resolver)).collect::<Vec<_>>().join(",");
+
+//         if let Some(ResolvedModule::Sink(config)) = resolver.get(name.clone()) {
+//             // Sink stuff
+//             todo!()
+//         } else {
+//             todo!()
+//             // normal
+//         }
+
+//         format!(r#"\
+// {{attribute}}
+// fn {name}({inputs}) {output_type} {{
+//     {formatters}
+//     let (mut engine, mut scope) = engine_init!();
+//     let ast = engine.compile(RHAI_SCRIPT).unwrap();
+//     let result: Dynamic = engine.call_fn(&mut scope, &ast, "{handler}", ({args})).expect("Call failed");
+//     if result.is_unit() {{
+//         None
+//     }} else {{
+//         let conversion = {fully_qualified_path}(result);
+//         Some(conversion)
+//     }}
+// }}
+//             "#)
+//     }
+// }
 
 pub struct RustModuleTemplate {
     name: ImmutableString,

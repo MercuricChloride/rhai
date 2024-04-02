@@ -71,6 +71,14 @@ impl Module {
             kind,
         }
     }
+
+    pub fn update_policy(&self) -> Option<UpdatePolicy> {
+        if let Some(Accessor::Store(policy)) = &self.inputs.last().map(|i| i.access) {
+            return Some(*policy);
+        }
+
+        None
+    }
 }
 
 impl FromStr for Input {
