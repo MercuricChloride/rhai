@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::packages::streamline::codegen::yaml::YamlGenerator;
 use crate::serde::from_dynamic;
 use crate::{plugin::*, tokenizer::Token, Array, Scope};
 use core::cell::RefCell;
@@ -160,12 +161,11 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
 
     let modules = resolver.clone();
     engine.register_fn("generate_yaml", move |path: String| {
-        let modules = (*modules).borrow();
-
-        todo!("Need to generate yaml");
-        //let yaml = codegen::yaml::generate_yaml(&modules, &sink_config);
-        //fs::write(&path, &yaml).unwrap();
-        //format!("Wrote yaml to {} successfully!", &path)
+        let modules = (*modules).clone().borrow().clone();
+        let generator = YamlGenerator::new(Box::new(modules) as Box<dyn ModuleResolver>);
+        let yaml = generator.generate();
+        fs::write(&path, yaml).unwrap();
+        format!("Wrote yaml to {} successfully!", &path)
     });
 
     let modules = resolver.clone();
