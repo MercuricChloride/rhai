@@ -10,9 +10,11 @@ use std::rc::Rc;
 use streamline::modules as m; //::{Accessor, Kind, Input as SInput, Module as SModule};
 use streamline::sink::{DefaultModuleResolver, ModuleResolver, ResolvedModule};
 
+/// The rust code generation struct
 pub struct RustGenerator(Box<dyn ModuleResolver>);
 
 impl RustGenerator {
+    /// Creates a new Rust Code Generator
     pub fn new(resolver: Box<dyn ModuleResolver>) -> Self {
         Self(resolver)
     }

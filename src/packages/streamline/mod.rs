@@ -9,13 +9,13 @@ mod abi;
 mod blocks;
 /// Adds Substreams types to the Rhai Runtime
 pub mod builtins;
+/// Adds a generic API to handle code generation for the substreams modules
+/// Includes full support for sinks
 pub mod codegen;
 /// Constants used in streamline
 pub mod constants;
 /// A plugin that adds support for the graph_out sink. Eventually this will live in it's own repo
 pub mod graph_out;
-/// A plugin system for changing how certain map modules are written
-pub mod module_resolver;
 mod module_types;
 /// A plugin to handle the dag of substreams modules
 mod modules;
@@ -24,7 +24,6 @@ mod sink;
 def_package! {
     /// Streamline package for the substreams module
     pub StreamlinePackage(module): StandardPackage {
-        combine_with_exported_module!(module, "module_helpers", modules::module_api);
         combine_with_exported_module!(module, "abi_helpers", abi::abi_api);
         combine_with_exported_module!(module, "block_helpers", blocks::blocks);
     }
