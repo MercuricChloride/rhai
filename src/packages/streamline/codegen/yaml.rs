@@ -120,7 +120,9 @@ impl YamlModule {
             );
             map.insert("updatePolicy".into(), Value::String(update_policy.into()));
         } else {
-            map.insert("output".into(), Value::String(self.output.clone().into()));
+            let mut output_map: HashMap<ImmutableString, Value> = HashMap::new();
+            output_map.insert("type".into(), Value::String(self.output.clone().into()));
+            map.insert("output".into(), serde_yaml::to_value(output_map).unwrap());
         }
 
         serde_yaml::to_value(&map).unwrap()
