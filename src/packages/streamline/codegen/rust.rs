@@ -1,8 +1,8 @@
 use super::Codegen;
 use crate::packages::streamline;
 use crate::packages::streamline::constants::{
-    MFN_ATTRIBUTE, MFN_DEFAULT_CONVERSION, MFN_OUTPUT, MFN_OUTPUT_TYPE, SFN_ATTRIBUTE,
-    SFN_BIGINT_DELTAS, SFN_BIGINT_GET, SFN_JSON_DELTAS, SFN_JSON_GET,
+    MFN_ATTRIBUTE, MFN_DEFAULT_CONVERSION, MFN_OUTPUT, MFN_OUTPUT_TYPE, SFN_ADD, SFN_ATTRIBUTE,
+    SFN_BIGINT_DELTAS, SFN_BIGINT_GET, SFN_JSON_DELTAS, SFN_JSON_GET, SFN_SET, SFN_SET_ONCE,
 };
 use crate::packages::streamline::modules::{Accessor, Input, Kind, UpdatePolicy};
 use crate::ImmutableString;
@@ -59,8 +59,15 @@ struct RustInput {
 
 impl RustInput {
     pub fn new(input: &Input, resolver: &Box<dyn ModuleResolver>) -> Option<Self> {
-        if let Accessor::Store(_) = input.access {
-            return None;
+        if let Accessor::Store(store) = input.access {
+            let name = input.name.clone().into();
+            let value_type = match store {
+                UpdatePolicy::Add => SFN_ADD,
+                UpdatePolicy::Set => SFN_SET,
+                UpdatePolicy::SetOnce => SFN_SET_ONCE,
+            }
+            .into();
+            return Some(RustInput { name, value_type });
         }
         let Input { name, access } = &input;
         let name = name.split(":").collect::<Vec<_>>()[0];

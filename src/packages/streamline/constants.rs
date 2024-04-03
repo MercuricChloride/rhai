@@ -14,6 +14,13 @@ pub const SFN_JSON_GET: &str = "StoreGetProto<JsonValue>";
 /// Represents the type of a normal SFN module used in deltas mode
 pub const SFN_JSON_DELTAS: &str = "Deltas<DeltaProto<JsonValue>>";
 
+/// Represents the the type of the Store, when used in set mode
+pub const SFN_SET: &str = "StoreSetProto<JsonValue>";
+/// Represents the the type of the Store, when used in set once mode
+pub const SFN_SET_ONCE: &str = "StoreSetIfNotExistsProto<JsonValue>";
+/// Represents the the type of the Store, when used in add mode
+pub const SFN_ADD: &str = "StoreAddBigInt";
+
 /// Represents the type of an add SFN module used in get mode
 pub const SFN_BIGINT_GET: &str = "StoreGetBigInt";
 /// Represents the type of an add SFN module used in deltas mode
