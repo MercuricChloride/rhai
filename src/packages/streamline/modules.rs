@@ -149,13 +149,11 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     });
 
     let modules = resolver.clone();
-    engine.register_fn(
-        "add_sfn",
-        move |name: ImmutableString, inputs: Vec<ImmutableString>| {
-            (*modules).borrow_mut().add_sfn(name, inputs);
-            "Added sfn to DAG!".to_string()
-        },
-    );
+    engine.register_fn("add_sfn", move |name: ImmutableString, inputs: Array| {
+        let inputs = map_cast!(inputs, |e| e.clone().into_immutable_string().ok());
+        (*modules).borrow_mut().add_sfn(name, inputs);
+        "Added sfn to DAG!".to_string()
+    });
 
     let modules = resolver.clone();
     engine.register_fn("generate_yaml", move |path: String| {
