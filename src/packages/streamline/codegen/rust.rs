@@ -61,11 +61,11 @@ impl RustInput {
     pub fn new(input: &Input, resolver: &Box<dyn ModuleResolver>) -> Self {
         let Input { name, access } = &input;
 
-        let resolved = resolver
+        let (resolved, sink_config) = resolver
             .get(name.into())
             .expect(&format!("No module found for: {}", &name));
 
-        match resolved {
+        let mut input = match resolved {
             ResolvedModule::Module(module) => {
                 if let Kind::Map = module.kind {
                     RustInput {
@@ -96,15 +96,18 @@ impl RustInput {
                     }
                 }
             }
-            ResolvedModule::SinkConfig(sink) => RustInput {
-                name: name.into(),
-                value_type: sink.rust_name.as_str().into(),
-            },
+            ResolvedModule::SinkConfig(sink) => unreachable!(),
             ResolvedModule::Source(source) => RustInput {
                 name: name.into(),
                 value_type: source.rust_name.as_str().into(),
             },
-        }
+        };
+
+        if let Some(config) = sink_config {
+            input.value_type = config.rust_name.as_str().into();
+        };
+
+        return input;
     }
 }
 
@@ -114,11 +117,11 @@ impl RustHandler {
         resolver: &Box<dyn ModuleResolver>,
         inputs: Vec<Box<dyn Codegen>>,
     ) -> Self {
-        let module = resolver
+        let (module, sink_config) = resolver
             .get(name.clone())
             .expect(&format!("No module found for: {}", &name));
 
-        match module {
+        let mut handler = match module {
             ResolvedModule::Module(module) => {
                 if let Kind::Map = module.kind {
                     RustHandler {
@@ -138,15 +141,21 @@ impl RustHandler {
                     }
                 }
             }
-            ResolvedModule::SinkConfig(sink) => RustHandler {
-                name,
-                inputs,
-                conversion: sink.fully_qualified_path.as_str().into(),
-                output_type: sink.rust_name.as_str().into(),
-                attribute: MFN_ATTRIBUTE.into(),
-            },
+            ResolvedModule::SinkConfig(_) => unreachable!(),
             ResolvedModule::Source(_) => unreachable!(),
+        };
+
+        if let Some(config) = sink_config {
+            handler.conversion = config.fully_qualified_path.as_str().into();
+            let sink_output = config.rust_name.as_str().into();
+            let new_output_type = handler
+                .output_type
+                .clone()
+                .replace(MFN_OUTPUT_TYPE, sink_output);
+            handler.output_type = new_output_type.into();
         }
+
+        return handler;
     }
 }
 
@@ -228,19 +237,23 @@ mod tests {
 
     use super::*;
 
-    fn default_module() -> Module {
-        todo!()
-    }
-
     fn setup() -> Box<dyn ModuleResolver> {
         let mut resolver = DefaultModuleResolver::new();
-        let module = default_module();
-        resolver.set_module("map_events".into(), ResolvedModule::Module(module));
+        resolver.add_mfn("map_events".into(), vec!["BLOCK".into()]);
+        resolver.add_mfn("graph_out".into(), vec!["map_events".into()]);
         Box::new(resolver) as Box<dyn ModuleResolver>
     }
 
     #[test]
-    fn test_mfn_generation() {}
+    fn test_mfn_generation() {
+        let resolver = setup();
+
+        let generator = RustGenerator::new(resolver);
+
+        let source = generator.generate();
+
+        println!("{source}");
+    }
 }
 
 // fn generate_formatters(&self) -> Option<String> {

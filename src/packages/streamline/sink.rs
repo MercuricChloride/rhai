@@ -23,8 +23,11 @@ pub trait ModuleResolver {
     ///Adds a new module config to the resolver. This will overwrite an existing key.
     fn set_module(&mut self, module_name: ImmutableString, module: ResolvedModule);
 
-    /// Returns either a ResolvedModuleConfig if the module should have it's generated code changed
-    fn get(&self, module_name: ImmutableString) -> Option<&ResolvedModule>;
+    /// Returns an optional tuple containing:
+    /// (ResolvedModule, Option<SinkConfig>)
+    /// If the second item in the tuple is some, it represents the module being a sink
+    /// and needs some massaging for the generated code
+    fn get(&self, module_name: ImmutableString) -> Option<(&ResolvedModule, Option<&SinkConfig>)>;
 
     /// Returns a list of the modules a user has defined and included
     /// Note that this returns a Vec<Module> not resolved module.
@@ -98,15 +101,17 @@ impl SinkConfig {
 #[derive(Clone)]
 pub struct DefaultModuleResolver {
     modules: HashMap<ImmutableString, ResolvedModule>,
+    sinks: HashMap<ImmutableString, SinkConfig>,
 }
 
 impl DefaultModuleResolver {
     pub fn new() -> Self {
         let mut modules = HashMap::new();
-        modules.insert("graph_out".into(), SinkConfig::graph_out().into());
+        let mut sinks = HashMap::new();
+        sinks.insert("graph_out".into(), SinkConfig::graph_out().into());
         modules.insert("BLOCK".into(), Source::eth_block().into());
 
-        Self { modules }
+        Self { modules, sinks }
     }
 
     pub fn new_shared() -> Rc<RefCell<Self>> {
@@ -132,8 +137,14 @@ impl ModuleResolver for DefaultModuleResolver {
         self.modules.insert(module_name, module);
     }
 
-    fn get(&self, module_name: ImmutableString) -> Option<&ResolvedModule> {
-        self.modules.get(&module_name)
+    fn get(&self, module_name: ImmutableString) -> Option<(&ResolvedModule, Option<&SinkConfig>)> {
+        let sink = self.sinks.get(&module_name);
+        let module = self.modules.get(&module_name);
+        if let Some(module) = module {
+            Some((module, sink))
+        } else {
+            None
+        }
     }
 
     fn get_user_modules(&self) -> Vec<&Module> {
