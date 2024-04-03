@@ -4,7 +4,7 @@ use crate::packages::streamline::constants::{
     MFN_ATTRIBUTE, MFN_DEFAULT_CONVERSION, MFN_OUTPUT, MFN_OUTPUT_TYPE, SFN_ATTRIBUTE,
     SFN_BIGINT_DELTAS, SFN_BIGINT_GET, SFN_JSON_DELTAS, SFN_JSON_GET,
 };
-use crate::packages::streamline::modules::{Input, Kind, UpdatePolicy};
+use crate::packages::streamline::modules::{Accessor, Input, Kind, UpdatePolicy};
 use crate::ImmutableString;
 use std::rc::Rc;
 use streamline::modules as m; //::{Accessor, Kind, Input as SInput, Module as SModule};
@@ -30,7 +30,7 @@ impl Codegen for RustGenerator {
             let inputs = module
                 .inputs
                 .iter()
-                .map(|e| RustInput::new(e, &resolver))
+                .filter_map(|e| RustInput::new(e, &resolver))
                 .map(|e| Box::new(e) as Box<dyn Codegen>)
                 .collect::<Vec<_>>();
 
@@ -58,8 +58,12 @@ struct RustInput {
 }
 
 impl RustInput {
-    pub fn new(input: &Input, resolver: &Box<dyn ModuleResolver>) -> Self {
+    pub fn new(input: &Input, resolver: &Box<dyn ModuleResolver>) -> Option<Self> {
+        if let Accessor::Store(_) = input.access {
+            return None;
+        }
         let Input { name, access } = &input;
+        let name = name.split(":").collect::<Vec<_>>()[0];
 
         let (resolved, sink_config) = resolver
             .get(name.into())
@@ -107,7 +111,7 @@ impl RustInput {
             input.value_type = config.rust_name.as_str().into();
         };
 
-        return input;
+        return Some(input);
     }
 }
 
@@ -168,6 +172,19 @@ impl Codegen for RustHandler {
             output_type,
             attribute,
         } = &self;
+
+        // returns (needs_formatting, name)
+        let needs_formatting = |generated_input: &str| {
+            let name = generated_input.split(":").collect::<Vec<_>>()[0];
+            (
+                generated_input.contains("StoreGet")
+                    || generated_input.contains("Deltas")
+                    || generated_input.contains("StoreSet")
+                    || generated_input.contains("StoreAdd"),
+                name.to_string(),
+            )
+        };
+
         // Store modules don't do anything with the result of the function call, so we set the 'body' to be an empty string
         // Otherwise we have to apply some conversions to them
         let mut body: String = "".into();
@@ -179,6 +196,22 @@ impl Codegen for RustHandler {
         let single_input = inputs.len() == 1;
 
         let fn_inputs = &inputs.join(",");
+        let formatters = inputs
+            .clone()
+            .iter()
+            .filter_map(|input| {
+                // TODO I need to make a more robust version of this as plugin features get added
+                // but for now this is totally fine
+                let (needs_formatting, name) = needs_formatting(&input);
+                if needs_formatting {
+                    Some(format!("let {name} = Rc::new({name});"))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
         let mut handler_inputs = inputs
             .clone()
             .iter()
@@ -214,6 +247,7 @@ if result.is_unit() {{
             r#"
 {attribute}
 fn {name}({fn_inputs}) {output_type} {{
+{formatters}
     let (mut engine, mut scope) = engine_init!();
     let ast = engine.compile(RHAI_SCRIPT).unwrap();
     let result: Dynamic = engine.call_fn(&mut scope, &ast, "{name}", ({handler_inputs})).expect("Call failed");

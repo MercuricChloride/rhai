@@ -130,13 +130,15 @@ impl YamlModule {
 impl YamlInput {
     /// Creates a new YamlInput
     pub fn new(input: &Input, resolver: &Box<dyn ModuleResolver>) -> Option<Self> {
+        let name = input.name.split(":").collect::<Vec<_>>()[0];
         if let Accessor::Store(_) = input.access {
             return None;
         }
 
-        let (input_module, _) = resolver
-            .get(input.name.as_str().into())
-            .expect("Tried to use module as input, but module isn't defined!");
+        let (input_module, _) = resolver.get(name.into()).expect(&format!(
+            "Tried to use module as input, but module isn't defined! {:?}",
+            name
+        ));
 
         Some(match input_module {
             ResolvedModule::Module(module) => {
