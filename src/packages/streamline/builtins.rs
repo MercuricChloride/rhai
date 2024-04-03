@@ -5,6 +5,7 @@ use crate::serde::to_dynamic;
 use crate::Array;
 use crate::Dynamic;
 use crate::Engine;
+use crate::ImmutableString;
 use crate::Map;
 use prost_wkt_types::{value::Kind, Value};
 use serde::Deserialize;
@@ -63,11 +64,6 @@ impl TypeRegister for Rc<Deltas<DeltaProto<JsonValue>>> {
                     .deltas
                     .iter()
                     .map(|delta| {
-                        //let old_value = serde_json::to_string(&delta.old_value).unwrap();
-                        //let old_value: serde_json::Map<_, _> =
-                        //serde_json::from_str(&old_value).unwrap();
-                        //let old_value: rhai::Map = serde_json::from_value(old_value).unwrap();
-
                         let new_value = serde_json::to_value(&delta.new_value).unwrap();
                         let new_value: Map = serde_json::from_value(new_value).unwrap();
 
@@ -170,11 +166,11 @@ impl TypeRegister for Vec<u8> {
         // register the address type
         engine
             .register_type_with_name::<Vec<u8>>("Address")
-            .register_fn("address", |x: String| {
+            .register_fn("address", |x: ImmutableString| {
                 if x.len() == 42 {
-                    Dynamic::from(Hex(x).to_string())
+                    Dynamic::from(Hex(x.to_string()).to_string())
                 } else {
-                    Dynamic::from(())
+                    Dynamic::UNIT
                 }
             });
     }

@@ -1,5 +1,6 @@
 use crate::serde::from_dynamic;
 use crate::{plugin::*, Array, Map as Obj, Scope};
+use anyhow::{anyhow, bail, ensure, Error};
 use core::convert::{TryFrom, TryInto};
 use core::str::FromStr;
 use num_traits::ToPrimitive;
@@ -16,6 +17,22 @@ use substreams_entity_change::tables::ToValue;
 macro_rules! set {
     ($map:ident, $key:expr, $val:expr) => {
         $map.insert($key.into(), $val.into());
+    };
+}
+
+macro_rules! as_value {
+    ($variant:ident, $value:expr) => {
+        Some(Value {
+            typed: Some(Typed::$variant($value)),
+        })
+    };
+}
+
+macro_rules! field_value {
+    ($variant: ident, $value: expr) => {
+        Ok(Value {
+            typed: Some(Typed::$variant($value)),
+        })
     };
 }
 
@@ -69,24 +86,76 @@ mod graph_out {
     }
 }
 
-macro_rules! as_value {
-    ($variant:ident, $value:expr) => {
-        Some(Value {
-            typed: Some(Typed::$variant($value)),
-        })
-    };
+fn to_string(value: Dynamic) -> Result<String, Error> {
+    match value.type_name() {
+        "Uint" => {
+            let error = anyhow!("failed to cast {:?} to BigInt", value);
+            let big_int = value.try_cast::<BigInt>();
+            ensure!(big_int.is_some(), error);
+            return Ok(big_int.unwrap().to_string());
+        }
+        "Address" => {
+            let error = anyhow!("failed to cast {:?} to address (bytes)", value);
+            let as_bytes = value.try_cast::<Vec<u8>>();
+            ensure!(as_bytes.is_some(), error);
+            let as_hex = Hex(as_bytes.unwrap()).to_string();
+            return Ok(format!("0x{}", as_hex));
+        }
+        _ => {
+            let error = anyhow!("Failed to cast {:?} as a String!", &value);
+            let value = value.into_string();
+            ensure!(value.is_ok(), error);
+            return Ok(value.unwrap());
+        }
+    }
 }
 
-macro_rules! field_value {
-    ($variant: ident, $value: expr) => {
-        Ok(Value {
-            typed: Some(Typed::$variant($value)),
-        })
-    };
+fn to_hex_string(value: Dynamic) -> Result<String, Error> {
+    match value.type_name() {
+        "Uint" => {
+            let error = anyhow!("failed to cast {:?} to BigInt", value);
+            let big_int = value.try_cast::<BigInt>();
+            ensure!(big_int.is_some(), error);
+            // TODO Pretty sure this is right, though it depends on how the subgraph sink interprets bytes
+            let as_hex = Hex::encode(big_int.unwrap().to_signed_bytes_be());
+            return Ok(format!("0x{}", as_hex));
+        }
+        "Address" => {
+            let error = anyhow!("failed to cast {:?} to address (bytes)", value);
+            let as_bytes = value.try_cast::<Vec<u8>>();
+            ensure!(as_bytes.is_some(), error);
+            let as_hex = Hex(as_bytes.unwrap()).to_string();
+            return Ok(format!("0x{}", as_hex));
+        }
+        _ => {
+            todo!("Need to add support for other types as a Hex String")
+            //let error = anyhow!("Failed to cast {:?} as a String!", &value);
+            //let value = value.into_string();
+            //ensure!(value.is_ok(), error);
+            //return Ok(value.unwrap());
+        }
+    }
+}
+
+impl TryInto<BigInt> for Dynamic {
+    type Error = Error;
+
+    fn try_into(self) -> Result<BigInt, Self::Error> {
+        let error = anyhow!("Couldn't convert {:?} into BigInt!", &self);
+
+        let big_int = match self.type_name() {
+            "Uint" => self.try_cast::<BigInt>(),
+            "i64" => Some(BigInt::from(self.cast::<i64>())),
+            "i32" => Some(BigInt::from(self.cast::<i32>())),
+            _ => bail!(error),
+        };
+
+        Ok(big_int.unwrap())
+    }
 }
 
 impl TryInto<Value> for Dynamic {
-    type Error = &'static str;
+    type Error = Error;
 
     fn try_into(self) -> Result<Value, Self::Error> {
         let mut value: Obj = self.cast();
@@ -96,15 +165,29 @@ impl TryInto<Value> for Dynamic {
         if let (Some(variant), Some(value)) = (variant, value) {
             let variant: String = variant.cast();
             match variant.as_str() {
-                s if s.starts_with("BigInt") => field_value!(Bigint, value.cast()),
-                s if s.starts_with("Address") => {
-                    field_value!(String, value.into_string().unwrap())
+                "BigInt" => {
+                    let value: BigInt = value.try_into()?;
+                    return field_value!(Bigint, value.to_string());
                 }
+                "Address" | "String" => {
+                    let value = to_string(value)?;
+                    return field_value!(String, value);
+                }
+                "Bytes" => {
+                    let value = to_hex_string(value)?;
+                    return field_value!(Bytes, value);
+                }
+                "Bool" => {
+                    if value.is_bool() {
+                        return field_value!(Bool, value.as_bool().map_err(|e| anyhow!("{}", e))?);
+                    }
+                }
+                "Array" => todo!("Not supported yet!"),
+                "BigDecimal" => todo!("Not supported yet!"),
                 _ => todo!(),
             }
-        } else {
-            Err("Couldn't convert value into FieldValue")
         }
+        Err(anyhow!("Couldn't convert value into FieldValue"))
     }
 }
 
