@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use super::codegen::rust::RustGenerator;
 use super::codegen::{self, Codegen};
-use super::constants::INITIAL_BLOCK;
+use super::constants::{BIGINT_PROTO, INITIAL_BLOCK, JSON_VALUE_PROTO, MFN_OUTPUT_TYPE};
 use super::module_types::ModuleData;
 use super::sink::{DefaultModuleResolver, ModuleResolver};
 //use super::sink::{GlobalSinkConfig, SinkConfigMap};
@@ -27,6 +27,18 @@ pub enum UpdatePolicy {
     Add,
     Set,
     SetOnce,
+}
+
+impl UpdatePolicy {
+    /// Returns the protobuf type for the update policy
+    pub fn to_proto_string(&self) -> ImmutableString {
+        match &self {
+            UpdatePolicy::Add => "add",
+            UpdatePolicy::Set => "set",
+            UpdatePolicy::SetOnce => "setIfNotExists",
+        }
+        .into()
+    }
 }
 
 #[derive(Default, Copy, Clone, Serialize, Deserialize)]
@@ -48,10 +60,20 @@ pub struct Input {
     pub access: Accessor,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub enum Kind {
     Map,
     Store,
+}
+
+impl ToString for Kind {
+    fn to_string(&self) -> String {
+        match &self {
+            Kind::Map => "map",
+            Kind::Store => "store",
+        }
+        .into()
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -80,6 +102,18 @@ impl Module {
         }
 
         None
+    }
+
+    pub fn output_type(&self) -> ImmutableString {
+        match &self.update_policy() {
+            Some(policy) => match policy {
+                UpdatePolicy::Add => BIGINT_PROTO,
+                _ => JSON_VALUE_PROTO,
+            },
+            // If none, this means it's a mfn, which means it outputs a JsonValue
+            None => MFN_OUTPUT_TYPE,
+        }
+        .into()
     }
 }
 

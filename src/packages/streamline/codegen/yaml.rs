@@ -1,0 +1,205 @@
+use std::collections::HashMap;
+
+use serde_yaml::Value;
+
+use crate::{
+    packages::streamline::{
+        constants::TEMPLATE_YAML,
+        modules::{Accessor, Input, Kind},
+        sink::{ModuleResolver, ResolvedModule},
+    },
+    ImmutableString,
+};
+
+use super::Codegen;
+
+/// The yaml code generation struct
+pub struct YamlGenerator(Box<dyn ModuleResolver>);
+
+impl YamlGenerator {
+    /// Creates a new Yaml Code Generator
+    pub fn new(resolver: Box<dyn ModuleResolver>) -> Self {
+        Self(resolver)
+    }
+}
+
+impl Codegen for YamlGenerator {
+    fn generate(&self) -> String {
+        let resolver = &self.0;
+        let modules = resolver.get_user_modules();
+        let mut yaml_modules = vec![];
+
+        for module in modules.iter() {
+            let inputs = module
+                .inputs
+                .iter()
+                .filter_map(|e| YamlInput::new(e, &resolver))
+                .collect::<Vec<_>>();
+
+            let yaml_module = YamlModule::new(module.name.clone(), &resolver, inputs);
+            yaml_modules.push(yaml_module.to_yaml());
+        }
+
+        let module_code = serde_yaml::to_string(&yaml_modules).unwrap();
+        TEMPLATE_YAML
+            .replace("$$MODULES$$", &module_code)
+            .to_string()
+    }
+}
+
+#[derive(Default)]
+/// A representation of a module input, for the yaml output
+pub struct YamlInput {
+    name: ImmutableString,
+    kind: ImmutableString,
+    mode: Option<ImmutableString>,
+}
+
+/// A representation of a module, for the yaml output
+pub struct YamlModule {
+    name: ImmutableString,
+    kind: ImmutableString,
+    inputs: Vec<YamlInput>,
+    update_policy: Option<ImmutableString>,
+    output: ImmutableString,
+}
+
+impl YamlModule {
+    /// Creates a new YamlModule
+    pub fn new(
+        name: ImmutableString,
+        resolver: &Box<dyn ModuleResolver>,
+        inputs: Vec<YamlInput>,
+    ) -> Self {
+        let (module, sink_config) = resolver
+            .get(name.clone())
+            .expect(&format!("No module found for: {}", &name));
+
+        let mut yaml_module = match module {
+            ResolvedModule::Module(module) => {
+                if let Kind::Map = module.kind {
+                    YamlModule {
+                        name,
+                        inputs,
+                        kind: module.kind.to_string().into(),
+                        update_policy: None,
+                        output: module.output_type(),
+                    }
+                } else {
+                    YamlModule {
+                        name,
+                        inputs,
+                        kind: module.kind.to_string().into(),
+                        update_policy: module.update_policy().map(|e| e.to_proto_string()),
+                        output: module.output_type(),
+                    }
+                }
+            }
+            _ => unreachable!(),
+        };
+
+        if let Some(config) = sink_config {
+            yaml_module.output = config.protobuf_name.as_str().into();
+        }
+
+        return yaml_module;
+    }
+
+    /// Converts a module into a serde_yaml::Value
+    pub fn to_yaml(&self) -> Value {
+        let mut map: HashMap<ImmutableString, Value> = HashMap::new();
+        map.insert("name".into(), Value::String(self.name.clone().into()));
+        map.insert("kind".into(), Value::String(self.kind.clone().into()));
+        let inputs = &self.inputs.iter().map(|e| e.to_yaml()).collect::<Vec<_>>();
+        map.insert("inputs".into(), serde_yaml::to_value(inputs).unwrap());
+
+        if let Some(update_policy) = &self.update_policy {
+            map.insert(
+                "valueType".into(),
+                Value::String(self.output.clone().into()),
+            );
+            map.insert("updatePolicy".into(), Value::String(update_policy.into()));
+        } else {
+            map.insert("output".into(), Value::String(self.output.clone().into()));
+        }
+
+        serde_yaml::to_value(&map).unwrap()
+    }
+}
+
+impl YamlInput {
+    /// Creates a new YamlInput
+    pub fn new(input: &Input, resolver: &Box<dyn ModuleResolver>) -> Option<Self> {
+        if let Accessor::Store(_) = input.access {
+            return None;
+        }
+
+        let (input_module, _) = resolver
+            .get(input.name.as_str().into())
+            .expect("Tried to use module as input, but module isn't defined!");
+
+        Some(match input_module {
+            ResolvedModule::Module(module) => {
+                let is_store = module.kind == Kind::Store;
+                let access_mode: Option<ImmutableString> = if is_store {
+                    match input.access {
+                        Accessor::Deltas => Some("deltas".into()),
+                        Accessor::Get | Accessor::Default => Some("get".into()),
+                        Accessor::Store(_) => unreachable!(),
+                    }
+                } else {
+                    None
+                };
+
+                Self {
+                    name: module.name.clone(),
+                    kind: module.kind.to_string().into(),
+                    mode: access_mode,
+                }
+            }
+            ResolvedModule::SinkConfig(_) => unreachable!(),
+            ResolvedModule::Source(source) => Self {
+                name: source.protobuf_name.as_str().into(),
+                kind: "source".into(),
+                ..Default::default()
+            },
+        })
+    }
+
+    /// Converts the YamlInput, into a serde_yaml::Value
+    pub fn to_yaml(&self) -> Value {
+        let mut map: HashMap<ImmutableString, Value> = HashMap::new();
+
+        map.insert(self.kind.clone(), Value::String(self.name.as_str().into()));
+        if let Some(mode) = &self.mode {
+            map.insert("mode".into(), Value::String(mode.into()));
+        }
+
+        serde_yaml::to_value(&map).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::packages::streamline::sink::DefaultModuleResolver;
+
+    use super::*;
+
+    fn setup() -> Box<dyn ModuleResolver> {
+        let mut resolver = DefaultModuleResolver::new();
+        resolver.add_mfn("map_events".into(), vec!["BLOCK".into()]);
+        resolver.add_mfn("graph_out".into(), vec!["map_events".into()]);
+        Box::new(resolver) as Box<dyn ModuleResolver>
+    }
+
+    #[test]
+    fn test_mfn_generation() {
+        let resolver = setup();
+
+        let generator = YamlGenerator::new(resolver);
+
+        let source = generator.generate();
+
+        println!("{source}");
+    }
+}
