@@ -112,7 +112,7 @@ impl Module {
                 _ => JSON_VALUE_PROTO,
             },
             // If none, this means it's a mfn, which means it outputs a JsonValue
-            None => MFN_OUTPUT_TYPE,
+            None => JSON_VALUE_PROTO,
         }
         .into()
     }
