@@ -142,13 +142,11 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     let resolver = DefaultModuleResolver::new_shared();
 
     let modules = resolver.clone();
-    engine.register_fn(
-        "add_mfn",
-        move |name: ImmutableString, inputs: Vec<ImmutableString>| {
-            (*modules).borrow_mut().add_mfn(name, inputs);
-            "Added mfn to DAG!".to_string()
-        },
-    );
+    engine.register_fn("add_mfn", move |name: ImmutableString, inputs: Array| {
+        let inputs = map_cast!(inputs, |e| e.clone().into_immutable_string().ok());
+        (*modules).borrow_mut().add_mfn(name, inputs);
+        "Added mfn to DAG!".to_string()
+    });
 
     let modules = resolver.clone();
     engine.register_fn(
