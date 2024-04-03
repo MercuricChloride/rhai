@@ -59,8 +59,11 @@ struct RustInput {
 
 impl RustInput {
     pub fn new(input: &Input, resolver: &Box<dyn ModuleResolver>) -> Option<Self> {
+        let Input { name, access } = &input;
+        let name = name.split(":").collect::<Vec<_>>()[0];
+
         if let Accessor::Store(store) = input.access {
-            let name = input.name.clone().into();
+            let name = name.clone().into();
             let value_type = match store {
                 UpdatePolicy::Add => SFN_ADD,
                 UpdatePolicy::Set => SFN_SET,
@@ -69,8 +72,6 @@ impl RustInput {
             .into();
             return Some(RustInput { name, value_type });
         }
-        let Input { name, access } = &input;
-        let name = name.split(":").collect::<Vec<_>>()[0];
 
         let (resolved, sink_config) = resolver
             .get(name.into())
