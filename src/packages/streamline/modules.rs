@@ -36,7 +36,7 @@ impl UpdatePolicy {
         match &self {
             UpdatePolicy::Add => "add",
             UpdatePolicy::Set => "set",
-            UpdatePolicy::SetOnce => "setIfNotExists",
+            UpdatePolicy::SetOnce => "set_if_not_exists",
         }
         .into()
     }
