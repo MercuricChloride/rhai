@@ -89,7 +89,7 @@ pub struct SinkConfig {
 impl SinkConfig {
     pub fn graph_out() -> Self {
         Self {
-            protobuf_name: "substreams.entity.v1.EntityChanges".into(),
+            protobuf_name: "proto:substreams.entity.v1.EntityChanges".into(),
             rust_name: "substreams_entity_change::pb::entity::EntityChanges".into(),
             crate_name: "streamline_subgraph_conversions".into(),
             fully_qualified_path:
