@@ -92,7 +92,8 @@ impl SinkConfig {
             protobuf_name: "substreams.entity.v1.EntityChanges".into(),
             rust_name: "substreams_entity_change::pb::entity::EntityChanges".into(),
             crate_name: "streamline_subgraph_conversions".into(),
-            fully_qualified_path: "rhai::packages::streamline::graph_out::as_entity_changes".into(),
+            fully_qualified_path:
+                "rhai::packages::streamline::graph_out::as_entity_changes(result)".into(),
             spkg_link: "HARDCODED_FOR_NOW".into(),
         }
     }
