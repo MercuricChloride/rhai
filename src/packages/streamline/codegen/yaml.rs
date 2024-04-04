@@ -14,18 +14,18 @@ use crate::{
 use super::Codegen;
 
 /// The yaml code generation struct
-pub struct YamlGenerator(Box<dyn ModuleResolver>);
+pub struct YamlGenerator(Box<dyn ModuleResolver>, Option<i64>);
 
 impl YamlGenerator {
     /// Creates a new Yaml Code Generator
-    pub fn new(resolver: Box<dyn ModuleResolver>) -> Self {
-        Self(resolver)
+    pub fn new(resolver: Box<dyn ModuleResolver>, start_block: Option<i64>) -> Self {
+        Self(resolver, start_block)
     }
 }
 
 impl Codegen for YamlGenerator {
     fn generate(&self) -> String {
-        let resolver = &self.0;
+        let Self(resolver, start_block) = &self;
         let modules = resolver.get_user_modules();
         let mut yaml_modules = vec![];
 
@@ -37,7 +37,7 @@ impl Codegen for YamlGenerator {
                 .collect::<Vec<_>>();
 
             let yaml_module = YamlModule::new(module.name.clone(), &resolver, inputs);
-            yaml_modules.push(yaml_module.to_yaml());
+            yaml_modules.push(yaml_module.to_yaml(*start_block));
         }
 
         let module_code = serde_yaml::to_string(&yaml_modules).unwrap();
@@ -106,8 +106,11 @@ impl YamlModule {
     }
 
     /// Converts a module into a serde_yaml::Value
-    pub fn to_yaml(&self) -> Value {
+    pub fn to_yaml(&self, start_block: Option<i64>) -> Value {
         let mut map: HashMap<ImmutableString, Value> = HashMap::new();
+        if let Some(start_block) = start_block {
+            map.insert("initialBlock".into(), Value::Number(start_block.into()));
+        }
         map.insert("name".into(), Value::String(self.name.clone().into()));
         map.insert("kind".into(), Value::String(self.kind.clone().into()));
         let inputs = &self.inputs.iter().map(|e| e.to_yaml()).collect::<Vec<_>>();
@@ -200,7 +203,7 @@ mod tests {
     fn test_mfn_generation() {
         let resolver = setup();
 
-        let generator = YamlGenerator::new(resolver);
+        let generator = YamlGenerator::new(resolver, None);
 
         let source = generator.generate();
 

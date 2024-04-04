@@ -158,7 +158,19 @@ pub fn init_globals(engine: &mut Engine, scope: &mut Scope) {
     let modules = resolver.clone();
     engine.register_fn("generate_yaml", move |path: String| {
         let modules = (*modules).clone().borrow().clone();
-        let generator = YamlGenerator::new(Box::new(modules) as Box<dyn ModuleResolver>);
+        let generator = YamlGenerator::new(Box::new(modules) as Box<dyn ModuleResolver>, None);
+        let yaml = generator.generate();
+        fs::write(&path, yaml).unwrap();
+        format!("Wrote yaml to {} successfully!", &path)
+    });
+
+    let modules = resolver.clone();
+    engine.register_fn("generate_yaml", move |path: String, start_block: i64| {
+        let modules = (*modules).clone().borrow().clone();
+        let generator = YamlGenerator::new(
+            Box::new(modules) as Box<dyn ModuleResolver>,
+            Some(start_block),
+        );
         let yaml = generator.generate();
         fs::write(&path, yaml).unwrap();
         format!("Wrote yaml to {} successfully!", &path)
