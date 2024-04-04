@@ -141,12 +141,30 @@ impl TryInto<BigInt> for Dynamic {
     type Error = Error;
 
     fn try_into(self) -> Result<BigInt, Self::Error> {
-        let error = anyhow!("Couldn't convert {:?} into BigInt!", &self);
+        let error = anyhow!("Couldn't convert {:?} into BigInt!", &self.type_name());
 
         let big_int = match self.type_name() {
-            "Uint" => self.try_cast::<BigInt>(),
+            "Uint" | "substreams::scalar::BigInt" => self.try_cast::<BigInt>(),
             "i64" => Some(BigInt::from(self.cast::<i64>())),
             "i32" => Some(BigInt::from(self.cast::<i32>())),
+            "map" => {
+                let mut obj: Obj = self.cast();
+                let value_type = obj
+                    .remove("type")
+                    .and_then(|e| e.into_string().ok())
+                    .unwrap();
+
+                let value = obj
+                    .remove("value")
+                    .and_then(|e| e.into_string().ok())
+                    .unwrap();
+
+                if &value_type == "Uint" {
+                    Some(BigInt::from_str(&value).unwrap())
+                } else {
+                    bail!("asldfkjasf")
+                }
+            }
             _ => bail!(error),
         };
 
@@ -193,11 +211,12 @@ impl TryInto<Value> for Dynamic {
 
 fn as_field(mut change: Obj) -> Option<Field> {
     let name: String = change.remove("name")?.try_cast()?;
-    let new_value = change.remove("new_value")?.try_into().ok();
+    let value_obj = change.remove("new_value")?;
+    let new_value = value_obj.try_into().unwrap();
 
     Some(Field {
         name,
-        new_value,
+        new_value: Some(new_value),
         // old_value is deprecated
         old_value: None,
     })

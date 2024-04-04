@@ -51,6 +51,20 @@ where
     events
 }
 
+trait IntoJson {
+    fn into_json(&self) -> serde_json::Value;
+}
+
+impl IntoJson for BigInt {
+    fn into_json(&self) -> serde_json::Value {
+        let mut map = serde_json::Map::new();
+        map.insert("type".into(), "Uint".into());
+        map.insert("value".into(), self.to_string().into());
+
+        map.into()
+    }
+}
+
 trait TypeRegister {
     fn register_types(engine: &mut Engine);
 }
@@ -96,8 +110,8 @@ impl TypeRegister for Rc<Deltas<DeltaBigInt>> {
                     .deltas
                     .iter()
                     .map(|delta| {
-                        let new_value = serde_json::to_value(&delta.new_value.to_string()).unwrap();
-                        let new_value: Dynamic = serde_json::from_value(new_value).unwrap();
+                        let new_value = to_dynamic(delta.new_value.into_json());
+                        let old_value = to_dynamic(delta.old_value.into_json());
 
                         let mut obj = Map::new();
                         obj.insert("operation".into(), (delta.operation as i64).into());
@@ -105,9 +119,9 @@ impl TypeRegister for Rc<Deltas<DeltaBigInt>> {
                         obj.insert("key".into(), delta.key.clone().into());
                         obj.insert(
                             "old_value".into(),
-                            to_dynamic(delta.old_value.to_string()).unwrap(),
+                            old_value.unwrap(), //to_dynamic(delta.old_value.to_string()).unwrap(),
                         );
-                        obj.insert("new_value".into(), new_value);
+                        obj.insert("new_value".into(), new_value.unwrap());
                         Dynamic::from_map(obj)
                     })
                     .collect::<Vec<Dynamic>>();
