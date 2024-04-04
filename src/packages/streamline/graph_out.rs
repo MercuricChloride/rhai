@@ -165,25 +165,25 @@ impl TryInto<Value> for Dynamic {
         if let (Some(variant), Some(value)) = (variant, value) {
             let variant: String = variant.cast();
             match variant.as_str() {
-                "BigInt" => {
+                s if s.starts_with("BigInt") => {
                     let value: BigInt = value.try_into()?;
                     return field_value!(Bigint, value.to_string());
                 }
-                "Address" | "String" => {
+                s if s.starts_with("Address") || s.starts_with("String") => {
                     let value = to_string(value)?;
                     return field_value!(String, value);
                 }
-                "Bytes" => {
+                s if s.starts_with("Bytes") => {
                     let value = to_hex_string(value)?;
                     return field_value!(Bytes, value);
                 }
-                "Bool" => {
+                s if s.starts_with("Bool") => {
                     if value.is_bool() {
                         return field_value!(Bool, value.as_bool().map_err(|e| anyhow!("{}", e))?);
                     }
                 }
-                "Array" => todo!("Not supported yet!"),
-                "BigDecimal" => todo!("Not supported yet!"),
+                s if s.starts_with("Array") => todo!("Not supported yet!"),
+                s if s.starts_with("BigDecimal") => todo!("Not supported yet!"),
                 _ => todo!(),
             }
         }
