@@ -13,8 +13,8 @@ pub mod blocks {
     }
 
     #[rhai_fn(get = "number", pure)]
-    pub fn number(block: &mut EthBlock) -> Dynamic {
-        block.number.to_string().into()
+    pub fn number(block: &mut EthBlock) -> String {
+        block.number.to_string()
     }
 
     #[rhai_fn(get = "hash", pure)]
@@ -23,8 +23,8 @@ pub mod blocks {
     }
 
     #[rhai_fn(get = "timestamp", pure)]
-    pub fn timestamp(block: &mut EthBlock) -> Dynamic {
-        block.timestamp_seconds().to_string().into()
+    pub fn timestamp(block: &mut EthBlock) -> String {
+        block.timestamp_seconds().to_string()
     }
 }
 

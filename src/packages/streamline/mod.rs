@@ -19,6 +19,8 @@ pub mod graph_out;
 mod module_types;
 /// A plugin to handle the dag of substreams modules
 mod modules;
+/// Helpers for making rpc calls and type conversions for the used types
+pub mod rpc_calls;
 mod sink;
 
 def_package! {

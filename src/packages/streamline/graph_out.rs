@@ -147,6 +147,7 @@ impl TryInto<BigInt> for Dynamic {
             "Uint" | "substreams::scalar::BigInt" => self.try_cast::<BigInt>(),
             "i64" => Some(BigInt::from(self.cast::<i64>())),
             "i32" => Some(BigInt::from(self.cast::<i32>())),
+            "string" => BigInt::from_str(&self.into_immutable_string().unwrap()).ok(),
             "map" => {
                 let mut obj: Obj = self.cast();
                 let value_type = obj
@@ -202,7 +203,10 @@ impl TryInto<Value> for Dynamic {
                 }
                 s if s.starts_with("Array") => todo!("Not supported yet!"),
                 s if s.starts_with("BigDecimal") => todo!("Not supported yet!"),
-                _ => todo!(),
+                _ => {
+                    let value = to_string(value)?;
+                    return field_value!(String, value);
+                }
             }
         }
         Err(anyhow!("Couldn't convert value into FieldValue"))

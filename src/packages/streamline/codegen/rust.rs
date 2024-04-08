@@ -258,7 +258,7 @@ fn {name}({fn_inputs}) {output_type} {{
 {formatters}
     let (mut engine, mut scope) = engine_init!();
     let ast = engine.compile(RHAI_SCRIPT).unwrap();
-    let result: Dynamic = engine.call_fn(&mut scope, &ast, "{name}", ({handler_inputs})).expect("Call failed");
+    let mut result: Dynamic = engine.call_fn(&mut scope, &ast, "{name}", ({handler_inputs})).expect("Call failed");
     {body}
 }}
 "#,
