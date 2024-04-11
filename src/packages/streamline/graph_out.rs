@@ -147,7 +147,18 @@ impl TryInto<BigInt> for Dynamic {
             "Uint" | "substreams::scalar::BigInt" => self.try_cast::<BigInt>(),
             "i64" => Some(BigInt::from(self.cast::<i64>())),
             "i32" => Some(BigInt::from(self.cast::<i32>())),
-            "string" => BigInt::from_str(&self.into_immutable_string().unwrap()).ok(),
+            "string" => {
+                let as_string = &self.into_immutable_string().unwrap();
+
+                if as_string.is_empty() {
+                    Some(BigInt::zero())
+                } else {
+                    Some(BigInt::from_str(as_string).unwrap_or_else(|e| {
+                        substreams::log::println(&error.to_string());
+                        BigInt::zero()
+                    }))
+                }
+            }
             "map" => {
                 let mut obj: Obj = self.cast();
                 let value_type = obj

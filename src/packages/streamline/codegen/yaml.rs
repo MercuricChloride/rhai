@@ -47,7 +47,7 @@ impl Codegen for YamlGenerator {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 /// A representation of a module input, for the yaml output
 pub struct YamlInput {
     name: ImmutableString,
@@ -113,7 +113,20 @@ impl YamlModule {
         }
         map.insert("name".into(), Value::String(self.name.clone().into()));
         map.insert("kind".into(), Value::String(self.kind.clone().into()));
-        let inputs = &self.inputs.iter().map(|e| e.to_yaml()).collect::<Vec<_>>();
+        let param_string_input = {
+            let mut map = HashMap::new();
+            map.insert("params", "string");
+            let input = serde_yaml::to_value(map).expect("Failed to add params to input!");
+            input
+        };
+        let mut inputs = vec![param_string_input];
+        inputs.extend(
+            self.inputs
+                .clone()
+                .iter()
+                .map(|e| e.to_yaml())
+                .collect::<Vec<_>>(),
+        );
         map.insert("inputs".into(), serde_yaml::to_value(inputs).unwrap());
 
         if let Some(update_policy) = &self.update_policy {

@@ -254,9 +254,11 @@ if result.is_unit() {{
         format!(
             r#"
 {attribute}
-fn {name}({fn_inputs}) {output_type} {{
+fn {name}(substreams_param_string: String, {fn_inputs}) {output_type} {{
 {formatters}
     let (mut engine, mut scope) = engine_init!();
+    let substreams_param_string: serde_json::Value = serde_json::from_str(&substreams_param_string).expect("Couldn't convert param string, to json value!");
+    scope.push_constant("PARAMS", to_dynamic(substreams_param_string).expect("Couldn't convert (param string as Json) into a Dynamic Value!"));
     let ast = engine.compile(RHAI_SCRIPT).unwrap();
     let mut result: Dynamic = engine.call_fn(&mut scope, &ast, "{name}", ({handler_inputs})).expect("Call failed");
     {body}
