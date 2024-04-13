@@ -355,6 +355,46 @@ impl TypeRegister for BigInt {
                     Dynamic::from(())
                 }
             })
+            .register_fn("*", |x: BigInt, y: Dynamic| {
+                let as_string = y.to_string();
+                if let Ok(value) = BigInt::try_from(as_string) {
+                    Dynamic::from(x * value)
+                } else {
+                    Dynamic::from(())
+                }
+            })
+            .register_fn("/", |x: BigInt, y: Dynamic| {
+                let as_string = y.to_string();
+                if let Ok(value) = BigInt::try_from(as_string) {
+                    Dynamic::from(x / value)
+                } else {
+                    Dynamic::from(())
+                }
+            })
+            .register_fn("+", |x: BigInt, y: Dynamic| {
+                let as_string = y.to_string();
+                if let Ok(value) = BigInt::try_from(as_string) {
+                    Dynamic::from(x + value)
+                } else {
+                    Dynamic::from(())
+                }
+            })
+            .register_fn("-", |x: BigInt, y: Dynamic| {
+                let as_string = y.to_string();
+                if let Ok(value) = BigInt::try_from(as_string) {
+                    Dynamic::from(x - value)
+                } else {
+                    Dynamic::from(())
+                }
+            })
+            .register_fn("**", |x: BigInt, y: Dynamic| {
+                let as_string = y.to_string();
+                if let Ok(value) = as_string.parse() {
+                    Dynamic::from(x.pow(value))
+                } else {
+                    Dynamic::from(())
+                }
+            })
             .register_fn("to_string", |x: BigInt| x.to_string());
     }
 }

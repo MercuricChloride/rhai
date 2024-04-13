@@ -212,10 +212,15 @@ impl Codegen for RustHandler {
                 // but for now this is totally fine
                 let (needs_formatting, name) = needs_formatting(&input);
                 if needs_formatting {
-                    Some(format!("let {name} = Rc::new({name});"))
-                } else {
-                    None
+                    return Some(format!("let {name} = Rc::new({name});"));
                 }
+
+                let name = input.split(":").collect::<Vec<_>>()[0];
+                if !name.contains("BLOCK") {
+                    return Some(format!("let {name} = to_dynamic({name}).unwrap();"));
+                }
+
+                None
             })
             .collect::<Vec<_>>()
             .join("\n");
