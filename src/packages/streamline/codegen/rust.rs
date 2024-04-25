@@ -216,7 +216,7 @@ impl Codegen for RustHandler {
                 }
 
                 let name = input.split(":").collect::<Vec<_>>()[0];
-                if !name.contains("BLOCK") {
+                if !name.contains("BLOCK") && !name.contains("CLOCK") {
                     return Some(format!("let {name} = to_dynamic({name}).unwrap();"));
                 }
 

@@ -75,6 +75,12 @@ impl Source {
             rust_name: "EthBlock".into(),
         }
     }
+    pub fn clock() -> Self {
+        Self {
+            protobuf_name: "sf.substreams.v1.Clock".into(),
+            rust_name: "Clock".into(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -111,6 +117,7 @@ impl DefaultModuleResolver {
         let mut sinks = HashMap::new();
         sinks.insert("graph_out".into(), SinkConfig::graph_out().into());
         modules.insert("BLOCK".into(), Source::eth_block().into());
+        modules.insert("CLOCK".into(), Source::clock().into());
 
         Self { modules, sinks }
     }

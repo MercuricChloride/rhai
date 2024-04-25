@@ -32,7 +32,7 @@ type JsonValue = prost_wkt_types::Value;
 type EthBlock = substreams_ethereum::pb::eth::v2::Block;
 
 fn format_hex(address: &[u8]) -> String {
-    let address = Hex(address).to_string();
+    let address = Hex(address).to_string().to_lowercase();
     format!("0x{address}")
 }
 
@@ -70,6 +70,7 @@ where
             "from": from,
             "to": to,
             "tx_hash": tx_hash,
+            "log_index": log.log.index,
             "block_number": block_number,
             "block_hash": block_hash
         });
@@ -199,9 +200,6 @@ impl TypeRegister for Rc<Deltas<DeltaProto<JsonValue>>> {
                     .deltas
                     .iter()
                     .map(|delta| {
-                        let new_value = serde_json::to_value(&delta.new_value).unwrap();
-                        let new_value: Map = serde_json::from_value(new_value).unwrap();
-
                         let mut obj = Map::new();
                         obj.insert("operation".into(), (delta.operation as i64).into());
                         obj.insert("ordinal".into(), (delta.ordinal as i64).into());
@@ -210,7 +208,10 @@ impl TypeRegister for Rc<Deltas<DeltaProto<JsonValue>>> {
                             "old_value".into(),
                             to_dynamic(delta.old_value.clone()).unwrap(),
                         );
-                        obj.insert("new_value".into(), Dynamic::from_map(new_value));
+                        obj.insert(
+                            "new_value".into(),
+                            to_dynamic(delta.new_value.clone()).unwrap(),
+                        );
                         Dynamic::from_map(obj)
                     })
                     .collect::<Vec<Dynamic>>();
@@ -332,6 +333,7 @@ impl TypeRegister for Vec<u8> {
         // register the address type
         engine
             .register_type_with_name::<Vec<u8>>("Address")
+            .register_fn("address", |x: Vec<u8>| Dynamic::from(format_hex(&x)))
             .register_fn("address", |x: ImmutableString| {
                 if x.len() == 42 {
                     Dynamic::from(x)
@@ -346,7 +348,7 @@ impl TypeRegister for BigInt {
     fn register_types(engine: &mut Engine) {
         engine
             .register_type_with_name::<BigInt>("Uint")
-            .register_fn("uint", |x: BigInt| x.to_string())
+            .register_fn("uint", |x: BigInt| x)
             .register_fn("uint", |x: Dynamic| {
                 let as_string = x.to_string();
                 if let Ok(value) = BigInt::try_from(as_string) {
@@ -509,18 +511,18 @@ impl TypeRegister for Rc<StoreGetProto<JsonValue>> {
     fn register_types(engine: &mut Engine) {
         engine
             .register_type_with_name::<Self>("StoreGet")
-            .register_fn("get", |store: &mut Self, key: String| {
+            .register_fn("get", |store: &mut Self, key: ImmutableString| {
                 if let Some(value) = store.get_last(&key) {
-                    value
+                    to_dynamic(value).unwrap()
                 } else {
-                    Default::default()
+                    Dynamic::UNIT
                 }
             })
-            .register_fn("get_first", |store: &mut Self, key: String| {
+            .register_fn("get_first", |store: &mut Self, key: ImmutableString| {
                 if let Some(value) = store.get_first(&key) {
-                    value
+                    to_dynamic(value).unwrap()
                 } else {
-                    Default::default()
+                    Dynamic::UNIT
                 }
             });
     }

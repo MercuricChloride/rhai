@@ -4,7 +4,7 @@ use anyhow::{anyhow, bail, ensure, Error};
 use core::convert::{TryFrom, TryInto};
 use core::str::FromStr;
 use num_traits::ToPrimitive;
-use substreams::scalar::BigInt;
+use substreams::scalar::{BigDecimal, BigInt};
 use substreams::Hex;
 use substreams_entity_change::change::ToField;
 use substreams_entity_change::pb::entity::value::Typed;
@@ -184,6 +184,31 @@ impl TryInto<BigInt> for Dynamic {
     }
 }
 
+impl TryInto<BigDecimal> for Dynamic {
+    type Error = Error;
+
+    fn try_into(self) -> Result<BigDecimal, Self::Error> {
+        if self.is_string() {
+            let string = self.to_string();
+            if let Ok(value) = BigDecimal::from_str(&string) {
+                return Ok(value);
+            }
+
+            if let Ok(value) = BigInt::from_str(&string) {
+                return Ok(value.into());
+            }
+
+            bail!(
+                "Failed to convert {:?} to a BigDecimal in graph_out!",
+                string
+            );
+        } else {
+            let big_int: BigInt = self.try_into()?;
+            Ok(big_int.into())
+        }
+    }
+}
+
 impl TryInto<Value> for Dynamic {
     type Error = Error;
 
@@ -213,7 +238,10 @@ impl TryInto<Value> for Dynamic {
                     }
                 }
                 s if s.starts_with("Array") => todo!("Not supported yet!"),
-                s if s.starts_with("BigDecimal") => todo!("Not supported yet!"),
+                s if s.starts_with("BigDecimal") => {
+                    let value: BigDecimal = value.try_into()?;
+                    return field_value!(Bigdecimal, value.to_string());
+                }
                 _ => {
                     let value = to_string(value)?;
                     return field_value!(String, value);
