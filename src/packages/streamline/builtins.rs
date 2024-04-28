@@ -336,7 +336,7 @@ impl TypeRegister for Vec<u8> {
             .register_fn("address", |x: Vec<u8>| Dynamic::from(format_hex(&x)))
             .register_fn("address", |x: ImmutableString| {
                 if x.len() == 42 {
-                    Dynamic::from(x)
+                    Dynamic::from(x.to_lowercase())
                 } else {
                     Dynamic::UNIT
                 }
